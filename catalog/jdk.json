@@ -1,0 +1,56 @@
+{
+  "id": "jdk",
+  "displayName": "JDK (Eclipse Temurin)",
+  "listKind": "adoptiumApi",
+  "majors": [8, 11, 17, 21, 25],
+  "listApi": "https://api.adoptium.net/v3/assets/feature_releases/{major}/ga?architecture=x64&image_type=jdk&os=windows&vendor=adoptium&page_size=50",
+  "releaseFields": {
+    "releaseName": "release_name",
+    "semver": "version_data.semver",
+    "build": "version_data.build",
+    "packageLink": "binaries.0.package.link",
+    "packageChecksum": "binaries.0.package.checksum",
+    "packageSize": "binaries.0.package.size"
+  },
+  "fileRegex": "^OpenJDK(?<major>\\d+)U-jdk_x64_windows_hotspot_(?<tag>[\\w.]+)\\.zip$",
+  "assetNamingNote": "资产名不统一(实测三种:8u504b01 / 11.0.32.1_1 / 21.0.9_10),版本一律以 API release_name 为准;fileRegex 仅用于从 USTC 目录页筛出目标 zip",
+  "sources": [
+    {
+      "id": "ustc-latest",
+      "scope": "latestOnly",
+      "listUrl": "https://mirrors.ustc.edu.cn/github-release/adoptium/temurin{major}-binaries/LatestRelease/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/github-release/adoptium/temurin{major}-binaries/LatestRelease/{asset}",
+      "sidecarUrl": "{fileUrl}.sha256.txt",
+      "note": "境内高速(实测 21 线 195.5MB @ 4MB/s,sidecar 与 API checksum 一致)。8/11/17/21/25 各 major 均有 LatestRelease,但只保留最新构建且会滞后于 API(实测停在 21.0.9+10,API 已到 21.0.12+101),仅当所选版本恰为该构建时可用"
+    },
+    {
+      "id": "ghproxy",
+      "scope": "all",
+      "fileUrl": "https://github.com/adoptium/temurin{major}-binaries/releases/download/{releaseNameUrlenc}/{asset}",
+      "proxy": { "kind": "prefix", "value": "https://ghfast.top/" },
+      "sidecarUrl": "{fileUrl}.sha256.txt",
+      "note": "覆盖全部历史版本。M0 实测 21.0.3+9:代理 sidecar 与 API checksum 一致,包体 Range 206。releaseName 含 + 号必须转义为 %2B。代理为第三方服务,M1 需支持在设置中更换前缀/直连"
+    },
+    {
+      "id": "github-direct",
+      "scope": "all",
+      "fileUrl": "https://github.com/adoptium/temurin{major}-binaries/releases/download/{releaseNameUrlenc}/{asset}",
+      "note": "与 ghproxy 同 URL 但无前缀。2026-09-07 本机网络实测直连不可达(curl 超时),保留作海外/网络变化时的回退"
+    }
+  ],
+  "checksum": {
+    "kind": "adoptiumApi",
+    "algo": "sha256",
+    "note": "首选 API 响应内 binaries.0.package.checksum(权威、零额外请求);sidecar .sha256.txt(USTC 与代理两处均实测与之一致)作交叉验证或直取"
+  },
+  "rootDir": "{releaseName}",
+  "layout": "binSubdir",
+  "pathPlaceholderNote": "{asset} 来自 API 包名或 USTC 目录页;{major} 为 LTS 大版本;{releaseName}=jdk-X.Y.Z+N(即 zip 内顶层目录)",
+  "m0": {
+    "verifiedAt": "2026-09-07",
+    "sample": "21.0.9+10",
+    "sampleSha256": "1c67df516e97…见 m0-results.json 全值",
+    "evidence": "m0-results.json",
+    "deviation": "产品文档 §5 假设的清华 github-release/adoptium 路径不存在(404),首选境内源改为中科大 USTC;历史版本经 ghfast.top 代理 GitHub"
+  }
+}

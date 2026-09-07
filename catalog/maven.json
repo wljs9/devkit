@@ -1,0 +1,46 @@
+{
+  "id": "maven",
+  "displayName": "Apache Maven",
+  "listKind": "dirIndex",
+  "dirRegex": "^(?<ver>3\\.\\d+\\.\\d+)/$",
+  "fileRegex": "^apache-maven-(?<ver>3\\.\\d+\\.\\d+)-bin\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/apache/maven/maven-3/",
+      "fileUrl": "https://mirrors.huaweicloud.com/apache/maven/maven-3/{ver}/binaries/apache-maven-{ver}-bin.zip",
+      "note": "M0 实测:解析 37 个正式版(3.0.5~3.9.16,rc 目录需过滤);Range 206;3.9.16 实下 9.0MB 与官方 sha512 匹配"
+    },
+    {
+      "id": "tuna",
+      "listUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/",
+      "fileUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/{ver}/binaries/apache-maven-{ver}-bin.zip",
+      "note": "M0 实测:仅保留当前发布线(3.9.16 + 3.10.0-rc-1),历史版走华为或 archive"
+    },
+    {
+      "id": "archive",
+      "listUrl": "https://archive.apache.org/dist/maven/maven-3/",
+      "fileUrl": "https://archive.apache.org/dist/maven/maven-3/{ver}/binaries/apache-maven-{ver}-bin.zip",
+      "proxyable": true,
+      "note": "全历史 + 自带 sidecar,但境外;M0 实测 Range 206"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha512",
+    "urls": [
+      "https://dlcdn.apache.org/maven/maven-3/{ver}/binaries/apache-maven-{ver}-bin.zip.sha512",
+      "https://archive.apache.org/dist/maven/maven-3/{ver}/binaries/apache-maven-{ver}-bin.zip.sha512"
+    ],
+    "note": "重要:华为/清华镜像【不同步】校验文件,产品文档 §5 假设的\"同目录 .sha256\"不成立——实际是官方源 .sha512。校验和必须从 Apache 官方取(dlcdn 当前版 200 / archive 历史全 200,M0 实测镜像字节与官方一致)。M1 的 download.ts 哈希算法需支持 sha512"
+  },
+  "rootDir": "apache-maven-{ver}",
+  "layout": "binSubdir",
+  "m0": {
+    "verifiedAt": "2026-09-07",
+    "sample": "3.9.16",
+    "sampleSha512": "ed41650d4248…见 m0-results.json 全值",
+    "evidence": "m0-results.json"
+  }
+}

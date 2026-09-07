@@ -1,0 +1,48 @@
+{
+  "id": "node",
+  "displayName": "Node.js",
+  "listKind": "dirIndex",
+  "dirRegex": "^v(?<ver>\\d+\\.\\d+\\.\\d+)/$",
+  "fileRegex": "^node-v(?<ver>\\d+\\.\\d+\\.\\d+)-win-x64\\.zip$",
+  "versionPolicy": { "preferEvenMajorLts": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/nodejs/",
+      "fileUrl": "https://mirrors.huaweicloud.com/nodejs/v{ver}/node-v{ver}-win-x64.zip",
+      "note": "M0 实测 2026-09-07:解析 862 版;Range 206;下载 39.5MB 校验匹配。单连接约 0.5~0.6MB/s(未登录加速)"
+    },
+    {
+      "id": "tuna",
+      "listUrl": "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/",
+      "fileUrl": "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v{ver}/node-v{ver}-win-x64.zip",
+      "note": "M0 实测:目录页 200,792 个版本目录"
+    },
+    {
+      "id": "official",
+      "listUrl": "https://nodejs.org/dist/",
+      "fileUrl": "https://nodejs.org/dist/v{ver}/node-v{ver}-win-x64.zip",
+      "proxyable": true,
+      "note": "M0 实测直连 Range 206,境内可直连,无需代理"
+    }
+  ],
+  "checksum": {
+    "kind": "shasumsFile",
+    "algo": "sha256",
+    "urls": [
+      "https://mirrors.huaweicloud.com/nodejs/v{ver}/SHASUMS256.txt",
+      "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v{ver}/SHASUMS256.txt",
+      "https://nodejs.org/dist/v{ver}/SHASUMS256.txt"
+    ],
+    "lineMatch": "  node-v{ver}-win-x64.zip$",
+    "note": "各源同目录 SHASUMS256.txt(产品文档 v1.1 的 SHASUMS256.txt.txt 系笔误,实测文件名无重复后缀)"
+  },
+  "rootDir": "node-v{ver}-win-x64",
+  "layout": "binAtRoot",
+  "m0": {
+    "verifiedAt": "2026-09-07",
+    "sample": "v26.8.1",
+    "sampleSha256": "57693d8e93d1b04e7b7de46aca53ecd63e97564e73de36a68428d7ff08d83587",
+    "evidence": "m0-results.json"
+  }
+}

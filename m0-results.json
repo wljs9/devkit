@@ -1,8 +1,8 @@
 {
-  "probedAt": "2026-09-07T08:39:14.787Z",
+  "probedAt": "2026-09-07T08:46:29.587Z",
   "node": "v24.17.0",
-  "mode": "full",
-  "durationMs": 135502,
+  "mode": "quick",
+  "durationMs": 4863,
   "allGreen": true,
   "tools": [
     {
@@ -12,32 +12,24 @@
           "name": "目录解析(华为云 /nodejs/)",
           "ok": true,
           "detail": "解析 862 版,抽样 LTS 26.8.1",
-          "ms": 275
+          "ms": 277
         },
         {
           "name": "SHASUMS256.txt 解析",
           "ok": true,
           "detail": "57693d8e93d1b04e7b7de46aca53ecd63e97564e73de36a68428d7ff08d83587",
-          "ms": 53
+          "ms": 59
         },
         {
           "name": "zip 文件 Range 探测",
           "ok": true,
           "detail": "HTTP 206 (支持 Range)",
-          "ms": 135
-        },
-        {
-          "name": "真实下载(~30MB)与 SHA256 比对 v26.8.1",
-          "ok": true,
-          "detail": "匹配 57693d8e93d1… 0.6MB/s",
-          "ms": 62182
+          "ms": 141
         }
       ],
       "sample": {
         "version": "26.8.1",
-        "url": "https://mirrors.huaweicloud.com/nodejs/v26.8.1/node-v26.8.1-win-x64.zip",
-        "sha256": "57693d8e93d1b04e7b7de46aca53ecd63e97564e73de36a68428d7ff08d83587",
-        "sizeBytes": 41368195
+        "url": "https://mirrors.huaweicloud.com/nodejs/v26.8.1/node-v26.8.1-win-x64.zip"
       }
     },
     {
@@ -47,38 +39,30 @@
           "name": "版本发现(Adoptium API x64/windows/jdk)",
           "ok": true,
           "detail": "返回 14 条,最新 21.0.12+101.0.LTS",
-          "ms": 871
+          "ms": 862
         },
         {
           "name": "目录解析(USTC LatestRelease temurin21)",
           "ok": true,
           "detail": "OpenJDK21U-jdk_x64_windows_hotspot_21.0.9_10.zip sha256=1c67df516e97…",
-          "ms": 150
+          "ms": 159
         },
         {
           "name": "Adoptium API 同构建 checksum 与 USTC sidecar 比对",
           "ok": true,
           "detail": "21.0.9+10 一致 1c67df516e97… (GitHub 原始包 204962060 字节)",
-          "ms": 807
+          "ms": 758
         },
         {
           "name": "历史版本经 ghfast.top 代理可达(21 线第 10+ 条)",
           "ok": true,
           "detail": "21.0.3+9.0.LTS+9 sidecar 匹配;HTTP 206 (支持 Range)",
-          "ms": 2699
-        },
-        {
-          "name": "真实下载(~190MB)与 SHA256 比对 v21.0.9+10",
-          "ok": true,
-          "detail": "匹配 1c67df516e97… 3.9MB/s",
-          "ms": 49724
+          "ms": 2100
         }
       ],
       "sample": {
         "version": "21.0.9+10",
-        "url": "https://mirrors.ustc.edu.cn/github-release/adoptium/temurin21-binaries/LatestRelease/OpenJDK21U-jdk_x64_windows_hotspot_21.0.9_10.zip",
-        "sha256": "1c67df516e9795c0b09f5714bfe151da2e3cc988082042f5bbb60d75e4e63fb5",
-        "sizeBytes": 204962060
+        "url": "https://mirrors.ustc.edu.cn/github-release/adoptium/temurin21-binaries/LatestRelease/OpenJDK21U-jdk_x64_windows_hotspot_21.0.9_10.zip"
       }
     },
     {
@@ -88,32 +72,24 @@
           "name": "目录解析(华为云 maven-3/)",
           "ok": true,
           "detail": "解析 37 版(已滤 rc),抽样 3.9.16",
-          "ms": 189
+          "ms": 132
         },
         {
           "name": "校验和取回(dlcdn .sha512,回退 archive.apache.org)",
           "ok": true,
           "detail": "来源 dlcdn.apache.org sha512=ed41650d4248…",
-          "ms": 929
+          "ms": 319
         },
         {
           "name": "zip 文件 Range 探测",
           "ok": true,
           "detail": "HTTP 206 (支持 Range)",
-          "ms": 57
-        },
-        {
-          "name": "真实下载(~10MB)与 SHA512 比对 3.9.16",
-          "ok": true,
-          "detail": "匹配 ed41650d4248… 顺带 sha256=5af3b743dd8b… 0.5MB/s",
-          "ms": 17425
+          "ms": 54
         }
       ],
       "sample": {
         "version": "3.9.16",
-        "url": "https://mirrors.huaweicloud.com/apache/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip",
-        "sha256": "5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce",
-        "sizeBytes": 9395475
+        "url": "https://mirrors.huaweicloud.com/apache/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip"
       }
     }
   ]

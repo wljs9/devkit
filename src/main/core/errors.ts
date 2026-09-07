@@ -5,8 +5,8 @@
  */
 export class CoreError extends Error {
   readonly code: string;
-  /** 附带上下文(路径、URL、期望值等),供 UI 展示与日志 */
-  readonly context?: Record<string, unknown>;
+  /** 附带上下文(路径、URL、期望值等),供 UI 展示与日志;catch 侧可追加诊断键 */
+  context?: Record<string, unknown>;
 
   constructor(code: string, message: string, context?: Record<string, unknown>) {
     super(message);

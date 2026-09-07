@@ -1,0 +1,27 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.muted {
+  color: #888;
+}
+.mono {
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.diff-add {
+  color: #18a058;
+}
+.page {
+  padding: 20px 24px;
+}

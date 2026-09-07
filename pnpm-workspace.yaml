@@ -1,0 +1,3 @@
+# pnpm 11 构建脚本白名单(§3:回避原生模块;esbuild 仅 vitest 传递依赖)
+allowBuilds:
+  esbuild: true

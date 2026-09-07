@@ -1,6 +1,8 @@
 node_modules/
 dist/
 out/
+release/
 coverage/
 *.log
+*.tsbuildinfo
 .devkit-tmp/

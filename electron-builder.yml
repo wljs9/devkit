@@ -1,0 +1,18 @@
+# electron-builder(技术手册 §10)。M2 仅登记最小配置保证 `build` 链完整;
+# NSIS 打包与瘦身在 M4 落地(§13),届时补 nsis 段与图标裁剪。
+appId: com.devkit.app
+productName: DevKit
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**
+  - catalog/**
+  - '!**/*.map'
+extraResources:
+  # env.ps1 与 catalog 需随包发布(core/env.ts 以 process.resourcesPath 定位)
+  - from: resources/env.ps1
+    to: env.ps1
+  - from: catalog
+    to: catalog
+asar: true

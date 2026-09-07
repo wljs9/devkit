@@ -1,3 +1,8 @@
 # pnpm 11 构建脚本白名单(§3:回避原生模块;esbuild 仅 vitest 传递依赖)
+# electron 的 postinstall 是官方 install.js 拉二进制(非 node-gyp 原生编译),白名单放行;
+# .npmrc 已指 electron_mirror,下载走 npmmirror(见 CLAUDE.md M2 注意)。
 allowBuilds:
   esbuild: true
+  electron: true
+  # electron-builder 传递依赖;其 postinstall 仅服务 M4 打 NSIS 安装包,M2/M3 不跑打包 → 显式禁用
+  electron-winstaller: false

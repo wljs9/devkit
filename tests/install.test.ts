@@ -65,6 +65,22 @@ const ctx = (entry: CatalogEntry) => ({
   },
 });
 
+/**
+ * shasumsFile + lineMatch 专用夹具(Node 的真实校验形态;此前 §11 覆盖盲区)。
+ * 校验文件行 = `<sha256hex>␣␣pkg-<ver>.zip`(两空格,与 nodejs.org SHASUMS256.txt 一致)。
+ */
+function mkShasumsEntry(base: string): CatalogEntry {
+  const r = CatalogEntrySchema.safeParse({
+    id: PKG, displayName: 'Fixture ' + PKG, listKind: 'dirIndex',
+    dirRegex: '^node-(?<ver>\\d+\\.\\d+\\.\\d+)/$', fileRegex: '^pkg-\\d.*\\.zip$',
+    sources: [{ id: 'local', listUrl: `${base}/`, fileUrl: `${base}/pkg-{ver}.zip` }],
+    checksum: { kind: 'shasumsFile', algo: 'sha256', urls: [`${base}/SHASUMS256.txt`], lineMatch: '  pkg-{ver}.zip$' },
+    rootDir: `${PKG}-{ver}`, layout: 'binAtRoot',
+  });
+  if (!r.success) throw new Error(r.error.message);
+  return r.data;
+}
+
 async function addServer(version: string): Promise<CatalogEntry> {
   const buf = zipFor(version);
   const srv = await startFileServer(buf, `pkg-${version}.zip`);
@@ -166,6 +182,30 @@ describe('安装全链路:下载→校验→解压→建链→读回(§11)', () 
     expect(store.load().installs.map((i) => i.version)).toEqual([V1]);
     expect(markerViaCurrent()).toBe(`content-${V1}`);
     expect(history.list({ kind: 'uninstall' })).toHaveLength(1);
+  });
+
+  it('Node 式校验(shasumsFile+lineMatch):真实两空格行必须能取到校验和并完成安装(§7.6 M2 回归)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const entry = mkShasumsEntry(srv.url);
+    // 真实 nodejs.org SHASUMS256.txt 行格式:64位hex + 恰好两个空格 + 文件名(前后各留噪行)
+    sidecars['SHASUMS256.txt'] = [
+      'deadbeef'.repeat(8) + '  pkg-0.0.0.tar.gz',
+      createHash('sha256').update(buf).digest('hex') + '  pkg-' + V1 + '.zip',
+    ].join('\n');
+    const rec = await install(entry, verOf(V1), {}, ctx(entry));
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+    expect(rec.sha256).toEqual(createHash('sha256').update(buf).digest('hex'));
+  });
+
+  it('shasumsFile:两空格行里的期望哈希与包不符 → 校验和不匹配(拒绝安装,红线§3.5)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const entry = mkShasumsEntry(srv.url);
+    sidecars['SHASUMS256.txt'] = 'ab'.repeat(32) + '  pkg-' + V1 + '.zip';
+    await expect(install(entry, verOf(V1), {}, ctx(entry))).rejects.toThrowError(/校验和不匹配/);
   });
 
   it('卸载红线:版本路径若被换成 junction,第一道闸必须拦住递归删除(§7.3)', async () => {

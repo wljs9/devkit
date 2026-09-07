@@ -39,7 +39,7 @@ async function resolveExpectedChecksum(
   const fetchText = ctx.fetchText ?? defaultFetchText;
   const vars = varsOf(entry, ver, sourceId);
   const urls = (c.urls ?? []).map((u) => renderTemplate(u, vars));
-  const lineRe = c.lineMatch ? buildShasumsLineRe(c.lineMatch, String(vars.ver)) : null;
+  const lineRe = c.lineMatch ? buildShasumsLineRe(c.lineMatch, String(vars.ver), c.algo) : null;
   for (const url of urls) {
     let txt: string;
     try {
@@ -204,11 +204,19 @@ function pathEq(a: string, b: string): boolean {
   return a.toLowerCase().replace(/[\\/]+$/, '') === b.toLowerCase().replace(/[\\/]+$/, '');
 }
 
-/** SHASUMS 行匹配:哈希 + 空白 + 文件名(行尾锚定;{ver} 先代入,再转义字面量) */
-function buildShasumsLineRe(lineMatch: string, ver: string): RegExp {
+/**
+ * SHASUMS 行匹配:哈希 + 空白 + 文件名(行尾锚定;{ver} 先代入,再转义字面量)。
+ * ★ M2 走查实测修正:v2 之前把 lineMatch 的前导空格也塞进 \s+ 之后,
+ *   等于要求"哈希 + ≥1 空白 + 恰好两空格 + 文件名"(≥3 空白)——而 nodejs 官方
+ *   SHASUMS256.txt 真实行是 `<hash>␣␣filename`(仅两空格)→ 永不匹配,
+ *   所有 node 版本报"取不到校验和"。lineMatch 里的前导空格只是清单书写提示,
+ *   哈希↔文件名的间距一律交给 \s+ 吸收(trimStart)。
+ */
+function buildShasumsLineRe(lineMatch: string, ver: string, algo: HashAlgo): RegExp {
   const named = lineMatch.replace('{ver}', ver);
-  const literal = named.replace(/\$$/, ''); // 尾部 $ 视为行锚,不进字面量
-  return new RegExp(`([0-9a-f]{64})\\s+${literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm');
+  const literal = named.replace(/\$$/, '').trimStart(); // 尾部 $=行锚;前导空白间距由 \s+ 负责
+  const hex = algo === 'sha512' ? 128 : 64;
+  return new RegExp(`([0-9a-f]{${hex}})\\s+${literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'mi');
 }
 
 /** DevRoot 就绪性:cache/current/tools 三目录 + 校验(§5) */

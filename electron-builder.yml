@@ -1,5 +1,6 @@
-# electron-builder(技术手册 §10)。M2 仅登记最小配置保证 `build` 链完整;
-# NSIS 打包与瘦身在 M4 落地(§13),届时补 nsis 段与图标裁剪。
+# electron-builder(技术手册 §10,M4 落地)。
+# 原则:target 仅 nsis;per-user 安装(%LOCALAPPDATA%\Programs\DevKit),绝不写 HKLM;
+#       MVP 不签名(接受 SmartScreen 提示,README 写明处理);locales 裁剪走 afterPack hook。
 appId: com.devkit.app
 productName: DevKit
 directories:
@@ -10,9 +11,28 @@ files:
   - catalog/**
   - '!**/*.map'
 extraResources:
-  # env.ps1 与 catalog 需随包发布(core/env.ts 以 process.resourcesPath 定位)
+  # env.ps1 与 catalog 需随包发布(services.ts 以 process.resourcesPath 定位,§4 壳层路径知识)
   - from: resources/env.ps1
     to: env.ps1
   - from: catalog
     to: catalog
 asar: true
+# 渲染层依赖(vue/naive-ui/pinia/vue-router/@vicons)已移 devDependencies:vite 打进 bundle,
+# 留在 dependencies 会被 builder 再夹带一份进 app.asar(纯浪费)。运行时真依赖仅 extract-zip/semver/undici/zod。
+compression: maximum # lzma 实压(§10)
+win:
+  # 图标为 §13 待定项(产品正式名称/图标未定)→ 暂用 electron-builder 默认;签名 MVP 不做(§10)
+  signAndEditExecutable: false # 无证书环境跳过 rcedit/signtool 链,避免 winCodeSign 下载依赖
+afterPack: scripts/after-pack.mjs # locales 裁剪(§10"保留 zh-CN/en")
+nsis:
+  oneClick: false # 展示安装向导(§10)
+  perMachine: false # 仅 per-user → %LOCALAPPDATA%\Programs\DevKit,不触 HKLM(§10/红线 §3.1)
+  allowToChangeInstallationDirectory: false # 固定位置,与文档口径一致
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DevKit
+  installerLanguages:
+    - zh_CN
+    - en_US
+  artifactName: devkit-setup-${version}.${ext}
+  uninstallDisplayName: DevKit(开发环境管理器)

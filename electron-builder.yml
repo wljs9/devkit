@@ -26,8 +26,9 @@ win:
 afterPack: scripts/after-pack.mjs # locales 裁剪(§10"保留 zh-CN/en")
 nsis:
   oneClick: false # 展示安装向导(§10)
-  perMachine: false # 仅 per-user → %LOCALAPPDATA%\Programs\DevKit,不触 HKLM(§10/红线 §3.1)
-  allowToChangeInstallationDirectory: false # 固定位置,与文档口径一致
+  perMachine: false # 仅 per-user → 默认 %LOCALAPPDATA%\Programs\DevKit,不触 HKLM(§10/红线 §3.1)
+  # 2026-09-08 用户要求:安装目录必须可选,不强制装到固定位置(向导内翻页可改;默认仍是 per-user)
+  allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: DevKit

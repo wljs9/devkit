@@ -37,4 +37,4 @@ if (fs.existsSync(release)) {
     console.log(`[dist] ✓ ${f}  ${(bytes / MB).toFixed(1)} MB`);
   }
 }
-console.log('[dist] ✓ 全流程完成。安装器见 release/(NSIS per-user,装到 %LOCALAPPDATA%\\Programs\\DevKit)');
+console.log('[dist] ✓ 全流程完成。安装器见 release/(NSIS per-user,默认 %LOCALAPPDATA%\\Programs\\DevKit,向导内目录可选)');

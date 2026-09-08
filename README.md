@@ -40,7 +40,7 @@ pnpm dev            # electron-vite 三入口热加载
 pnpm dist   # typecheck → test → build → NSIS 安装包(release/devkit-setup-<版本>.exe)
 ```
 
-- 安装位置:`%LOCALAPPDATA%\Programs\DevKit`(**per-user,不需要管理员,绝不写 HKLM**);
+- 安装位置:**向导中可选目录**(默认 `%LOCALAPPDATA%\Programs\DevKit`,per-user,不需要管理员,绝不写 HKLM);
 - 脚本内置 npmmirror 镜像(`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`),GitHub 不可达也可出包。
 
 ### SmartScreen 提示(MVP 不签名,预期行为)

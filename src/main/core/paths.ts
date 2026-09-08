@@ -191,3 +191,54 @@ export function auditPathEntries(currentValue: string, exists: (p: string) => bo
   }
   return { total: parts.length, missing, duplicates: [...byKey.values()].filter((g) => g.length > 1) };
 }
+
+// ---------------------------------------------------------------- 体检装配(§4.4,M3;复用上方原语,不改其行为)
+
+export interface PathAuditRow {
+  /** 注册表原文(prune 的删除依据) */
+  raw: string;
+  /** %VAR% 展开后形态(存在性判定的口径) */
+  expanded: string;
+  scope: 'user' | 'system';
+  /** 指向不存在的目录(⚠ 失效);展开后仍含 % 的条目不判(宁漏不误报) */
+  missing: boolean;
+  /** 有效 PATH(系统→用户拼接)中出现 ≥2 次 */
+  duplicated: boolean;
+  /** 命中本工具 envPlan 固定条目 → 归"受管区"展示,外部区/UI 负责过滤 */
+  managed: boolean;
+}
+
+/**
+ * 把用户+系统 PATH 原始串装配成逐行体检表(§4.4)——纯函数:expand/exists 注入,可测。
+ * 内部只做拼接与打标,判定语义全部落在 auditPathEntries(决策 A:勿重写、只消费)。
+ */
+export function classifyPathEntries(opts: {
+  userValue: string;
+  systemValue: string | null;
+  /** 本工具受管条目(envPlan().pathEntries) */
+  managedEntries: string[];
+  expand?: (s: string) => string;
+  exists?: (p: string) => boolean;
+}): { rows: PathAuditRow[]; summary: { total: number; missing: number; duplicates: number } } {
+  const expand = opts.expand ?? ((x: string) => x);
+  const user = splitPathList(opts.userValue);
+  const sys = opts.systemValue ? splitPathList(opts.systemValue) : [];
+  // 有效顺序 = 系统在前用户在后(与 Windows 拼接一致),展开后整体送 audit 一次
+  const all = [...sys, ...user];
+  const audit = auditPathEntries(joinPathList(all.map(expand)), opts.exists);
+  const norm = (x: string) => x.toLowerCase().replace(/[\\/]+$/, '');
+  const missingSet = new Set(audit.missing.map(norm));
+  const dupSet = new Set(audit.duplicates.flat().map(norm));
+  const rows: PathAuditRow[] = all.map((raw, i) => {
+    const expanded = expand(raw);
+    return {
+      raw,
+      expanded,
+      scope: i < sys.length ? 'system' : 'user',
+      missing: !expanded.includes('%') && missingSet.has(norm(expanded)),
+      duplicated: dupSet.has(norm(expanded)),
+      managed: opts.managedEntries.some((m) => pathEntryEquals(m, raw) || pathEntryEquals(m, expanded)),
+    };
+  });
+  return { rows, summary: { total: audit.total, missing: audit.missing.length, duplicates: audit.duplicates.length } };
+}

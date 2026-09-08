@@ -23,12 +23,13 @@ const api: DevkitApi = {
   envState: () => ipcRenderer.invoke(Channel.EnvState),
   envAudit: () => ipcRenderer.invoke(Channel.EnvAudit),
   envPrune: (req) => ipcRenderer.invoke(Channel.EnvPrune, req),
-  envRestore: (req) => ipcRenderer.invoke(Channel.EnvRestore),
+  envRestore: (req) => ipcRenderer.invoke(Channel.EnvRestore, req), // M2 遗留:漏传 req,env:restore 曾恒失败 —— M3 接通时修复
 
   historyList: (req) => ipcRenderer.invoke(Channel.HistoryList, req),
 
   settingsGet: () => ipcRenderer.invoke(Channel.SettingsGet),
   settingsSet: (patch) => ipcRenderer.invoke(Channel.SettingsSet, patch),
+  cacheClear: () => ipcRenderer.invoke(Channel.CacheClear),
 
   setupPreview: (req) => ipcRenderer.invoke(Channel.SetupPreview, req),
   setupRun: (req) => ipcRenderer.invoke(Channel.SetupRun, req),

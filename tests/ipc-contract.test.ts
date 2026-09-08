@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Channel, PushChannel } from '../src/shared/ipc';
-import type { DownloadProgressEvent, InstallView } from '../src/shared/ipc';
+import type { DownloadProgressEvent, EnvAuditView, InstallView } from '../src/shared/ipc';
 import type { InstallRecord } from '../src/main/core/store';
 
 // 以 (keyof T)[] 标注:字段名漂移/笔误会在【编译期】报错 —— 这才是"防契约漂移"的门禁本意。
@@ -30,6 +30,27 @@ describe('§8 通道全集', () => {
   it('通道名唯一,无重复字面量', () => {
     const vals = Object.values(Channel);
     expect(new Set(vals).size).toBe(vals.length);
+  });
+
+  it('M2/M3 在 §8 全集之外新增的通道全部在册(集中定义防散落)', () => {
+    for (const c of ['setup:preview', 'setup:defaults', 'setup:check', 'shell:open-path', 'cache:clear']) {
+      expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
+    }
+  });
+
+  it('M3 体检/清理 DTO 可 JSON 往返(§8 判别联合前提)', () => {
+    const audit: EnvAuditView = {
+      devRoot: 'D:\\dev',
+      managed: [{ label: '%JAVA_HOME%\\bin', kind: 'path', value: '%JAVA_HOME%\\bin', present: true, targetOk: false }],
+      rows: [
+        { raw: 'C:\\ghost\\bin', expanded: 'C:\\ghost\\bin', scope: 'user', missing: true, duplicated: false, managed: false },
+        { raw: 'C:\\Windows\\system32', expanded: 'C:\\Windows\\system32', scope: 'system', missing: false, duplicated: true, managed: false },
+      ],
+      systemReadable: true,
+      summary: { total: 23, missing: 2, duplicates: 1 },
+    };
+    const back = JSON.parse(JSON.stringify(audit)) as EnvAuditView;
+    expect(back).toEqual(audit); // 决策 A 语义:present=true 且 targetOk=false = "⚠ 失效/悬空"
   });
 
   it('invoke 通道与 push 通道不冲突(§8:请求-响应 vs webContents.send 分轨)', () => {

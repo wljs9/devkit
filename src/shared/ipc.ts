@@ -23,6 +23,7 @@ export const Channel = {
   HistoryList: 'history:list',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',
+  CacheClear: 'cache:clear', // §4.6 [清理缓存](§8 全集之外新增,集中于此)
   SetupRun: 'setup:run',
   // §4.0 向导辅助(§8 通道全集之外新增者集中于此,仍全部定义在本文件)
   SetupPreview: 'setup:preview',
@@ -52,6 +53,8 @@ export interface ToolCardView {
   installedCount: number;
   /** current junction 指向的版本号;未装/未建链为 null */
   currentVersion: string | null;
+  /** 源 id 列表(按 catalog 优先级;设置页排源池用,§4.6) */
+  sourceIds: string[];
 }
 
 /** 版本行(§4.1 详情页;catalog.DiscoveredVersion 的可序列化子集) */
@@ -110,6 +113,9 @@ export interface ManagedEntryView {
   value: string;
   /** 当前用户态里是否已存在 */
   present: boolean;
+  /** 目标目录是否存在(%VAR% 按注册表现值展开后判定)——
+   *  决策 A(2026-09-07):present✓ 但 targetOk✗ = "⚠ 失效/悬空"(如装了 Maven 未装 JDK),由环境页体检暴露 */
+  targetOk: boolean;
 }
 
 export interface EnvStateView {
@@ -148,12 +154,58 @@ export interface HistoryViewEntry {
   backupFile?: string;
 }
 
+/** 外部 PATH 条目体检行(§4.4;core paths.ts PathAuditRow 的线上镜像) */
+export interface EnvPathRowView {
+  raw: string;
+  expanded: string;
+  scope: 'user' | 'system';
+  /** 指向不存在的目录(%VAR% 展开后判定;仍含 % 的不判) */
+  missing: boolean;
+  /** 有效 PATH(系统→用户拼接)中出现 ≥2 次 */
+  duplicated: boolean;
+  /** 命中本工具 envPlan 固定条目 → 归"受管条目"区展示,外部区仅留非受管 */
+  managed: boolean;
+}
+
+/** env:audit 返回(§4.4 体检页) */
+export interface EnvAuditView {
+  devRoot: string | null;
+  /** 受管条目状态(同 env:state.entries,含 targetOk —— 决策 A 的 ✓/⚠失效 来源) */
+  managed: ManagedEntryView[];
+  /** 全部条目(user+system 有效序);UI 按 managed 分区、按 scope 定可删性 */
+  rows: EnvPathRowView[];
+  /** 系统 PATH 读取失败(HKCU 读不到时 false;体检仅覆盖用户 PATH) */
+  systemReadable: boolean;
+  /** "PATH 共 23 条,失效 2,重复 1"(§4.4 底部汇总;total=用户+系统有效条目数) */
+  summary: { total: number; missing: number; duplicates: number };
+}
+
+/** env:prune 返回(§4.4 清理所选;backupFile=§7.2① 快照,历史页/环境页可回滚) */
+export interface EnvPruneResult {
+  removed: string[];
+  backupFile: string | null;
+  broadcast: 'ok' | 'timeout' | null;
+}
+
+/** cache:clear 返回(§4.6 清理缓存) */
+export interface CacheClearResult {
+  files: number;
+  bytes: number;
+}
+
 /** settings:get 返回(UI 需要的子集;存 core JsonRepository.settings) */
 export interface SettingsView {
   devRoot: string | null;
   sourcePriority: Record<string, string[]>;
   proxy: string;
   concurrency: number;
+  /** §4.6:源代理前缀覆盖(ghfast.top 等第三方加速器可换,风险登记 §12);'' = 去代理直连 */
+  sourcePrefixes: Record<string, string>;
+  /** §4.6 缓存区:下载缓存占用(DevRoot 未定/不可读为 null) */
+  cache: { dir: string; files: number; bytes: number } | null;
+  /** §4.6 关于 */
+  appVersion: string;
+  catalogVersion: string;
 }
 
 // ---------------------------------------------------------------- API 形状(preload 暴露 / renderer api.ts 消费)
@@ -170,14 +222,16 @@ export interface DevkitApi {
   installUninstall(req: { tool: string; version: string }): Promise<Result<null>>;
 
   envState(): Promise<Result<EnvStateView>>;
-  envAudit(): Promise<Result<unknown>>;
-  envPrune(req: { entries: string[] }): Promise<Result<unknown>>;
+  envAudit(): Promise<Result<EnvAuditView>>;
+  envPrune(req: { entries: string[] }): Promise<Result<EnvPruneResult>>;
   envRestore(req: { file: string }): Promise<Result<null>>;
 
   historyList(req?: { kind?: string; limit?: number }): Promise<Result<HistoryViewEntry[]>>;
 
   settingsGet(): Promise<Result<SettingsView>>;
   settingsSet(patch: Partial<SettingsView>): Promise<Result<SettingsView>>;
+  /** §4.6 [清理缓存]:只回收 cache\ 下断点与解压暂存;有活动下载时拒绝 */
+  cacheClear(): Promise<Result<CacheClearResult>>;
 
   setupPreview(req: { devRoot: string }): Promise<Result<SetupPlanView>>;
   setupRun(req: { devRoot: string }): Promise<Result<SetupRunResult>>;

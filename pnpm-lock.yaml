@@ -23,6 +23,9 @@ importers:
       semver:
         specifier: ^7.6.3
         version: 7.8.5
+      undici:
+        specifier: ^8.10.2
+        version: 8.10.2
       vue:
         specifier: ^3.5.11
         version: 3.5.42(typescript@5.9.3)
@@ -2060,6 +2063,10 @@ packages:
   undici@6.28.1:
     resolution: {integrity: sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==}
     engines: {node: '>=18.17'}
+
+  undici@8.10.2:
+    resolution: {integrity: sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==}
+    engines: {node: '>=22.19.0'}
 
   universalify@0.1.2:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
@@ -4319,6 +4326,8 @@ snapshots:
   undici-types@7.18.2: {}
 
   undici@6.28.1: {}
+
+  undici@8.10.2: {}
 
   universalify@0.1.2: {}
 

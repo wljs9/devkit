@@ -6,6 +6,7 @@
 import { app } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { EnvHttpProxyAgent, ProxyAgent, setGlobalDispatcher } from 'undici'; // §3 表内候选;全局 dispatcher 使内置 fetch 走代理(§4.6)
 import { CatalogEntry, loadCatalogDir, getVersions, FileCachePort, type DiscoveredVersion } from './core/catalog';
 import { Downloader } from './core/download';
 import { EnvService } from './core/env';
@@ -22,10 +23,14 @@ export interface Services {
   catalogCache: FileCachePort;
   /** catalog 文件懒加载(devRoot 未定前也可列清单) */
   catalogs(): Map<string, CatalogEntry>;
-  /** 全应用共享单一 Downloader(并发上限 2 与 cancel 跨任务生效);devRoot 变更则重建 */
+  /** 目录清单版本(§4.6 关于):catalog/ 目录最后修改时间 ISO(定稿日期语义) */
+  catalogVersion(): string;
+  /** 全应用共享单一 Downloader(并发上限与 cancel 跨任务生效);devRoot/并发数变更则重建 */
   downloader(): Downloader;
   getDevRoot(): string | null;
   setDevRoot(p: string): void;
+  /** §4.6 网络:把 settings.proxy 作用到全局 dispatcher('' = 跟随系统 HTTP(S)_PROXY) */
+  applyNetwork(): void;
 }
 
 let svc: Services | null = null;
@@ -68,13 +73,23 @@ export function initServices(): Services {
       }
       return catalogs;
     },
+    catalogVersion() {
+      if (!fs.existsSync(catalogDir)) return '未知(目录缺失)';
+      try {
+        return new Date(fs.statSync(catalogDir).mtimeMs).toISOString();
+      } catch {
+        return '未知';
+      }
+    },
     downloader() {
       const devRoot = s.getDevRoot();
       if (!devRoot) throw new CoreError('no-devroot', '尚未选择 DevRoot(请先完成首跑向导)');
-      // 记忆化:同一 devRoot 复用同一实例 → 并发上限与取消跨任务生效(§7.4);换根才重建
-      if (!dl || dlRoot !== devRoot) {
-        dl = new Downloader({ devRoot });
-        dlRoot = devRoot;
+      const conc = concurrencyOf(store);
+      // 记忆化:同一 devRoot+并发复用同一实例 → 并发上限与取消跨任务生效(§7.4);换根/改并发才重建
+      const key = `${devRoot}|${conc}`;
+      if (!dl || dlRoot !== key) {
+        dl = new Downloader({ devRoot, maxConcurrent: conc });
+        dlRoot = key;
       }
       return dl;
     },
@@ -85,9 +100,26 @@ export function initServices(): Services {
     setDevRoot(p: string) {
       store.update((d) => ({ ...d, settings: { ...d.settings, devRoot: p } }));
     },
+    applyNetwork() {
+      const v = current().settings['proxy'];
+      const proxy = typeof v === 'string' ? v.trim() : '';
+      try {
+        // 空=跟随系统(读 HTTP(S)_PROXY 环境变量,Node fetch 不认 WinINET,文档口径如此);非法 URL 降级回跟随系统
+        setGlobalDispatcher(proxy ? new ProxyAgent({ uri: proxy }) : new EnvHttpProxyAgent());
+      } catch {
+        setGlobalDispatcher(new EnvHttpProxyAgent());
+      }
+    },
   };
+  s.applyNetwork(); // 启动即应用代理设置(§4.6)
   svc = s;
   return s;
+}
+
+/** settings.concurrency → Downloader 并发数(1~6,默认 2;§7.4) */
+function concurrencyOf(store: JsonRepository): number {
+  const v = store.load().settings['concurrency'];
+  return typeof v === 'number' && v >= 1 && v <= 6 ? Math.floor(v) : 2;
 }
 
 /** 默认 DevRoot 探测(§5);core/paths 的唯一消费者之一,UI 首跑步骤 1 用 */

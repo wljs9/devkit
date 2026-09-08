@@ -3,16 +3,19 @@
  * 本层只做三件事:①通道 ⇔ core 调用装配;②core 结果 → 线上 DTO;③异常 → Result 判别联合。
  * §8 铁律:异常不许跨进程裸抛,故每个 handler 经 wrap() 兜底。
  */
-import { ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
+import { existsSync } from 'node:fs';
 import {
   Channel, PushChannel,
-  type Result, type SettingsView, type DownloadProgressEvent, type DownloadTaskStatus, type ManagedEntryView,
+  type Result, type SettingsView, type DownloadProgressEvent, type DownloadTaskStatus,
+  type EnvAuditView, type EnvStateView, type ManagedEntryView,
 } from '../shared/ipc';
+import type { EnvVar } from './core/env';
 import { CoreError, isCoreError } from './core/errors';
-import type { CatalogEntry, DiscoveredVersion } from './core/catalog';
+import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
 import { install, setCurrent, uninstall, ensureDevRoot, type InstallContext } from './core/install';
-import { DownloadError } from './core/download';
-import { envPlan, checkDevRoot, splitPathList, pathEntryEquals, mergePathEntries } from './core/paths';
+import { cacheStats, clearDownloadCache, DownloadError } from './core/download';
+import { classifyPathEntries, envPlan, checkDevRoot, expandPathVars, splitPathList, pathEntryEquals, mergePathEntries } from './core/paths';
 import { initServices, suggestDevRoot, versionsOf, type Services } from './services';
 
 function ok<T>(data: T): Result<T> {
@@ -41,11 +44,21 @@ async function wrap<T>(fn: () => Promise<T> | T): Promise<Result<T>> {
 export function registerIpc(): void {
   const s = initServices();
 
+  /** §4.6 目录偏好(源优先级 + 代理前缀覆盖)作用到条目 —— "JDK/Maven catalog 接真"的装配半边 */
+  const prefsFor = (tool: string): CatalogPrefs => {
+    const st = s.store.load().settings as Record<string, unknown>;
+    const prio = st['sourcePriority'] as Record<string, string[]> | undefined;
+    const prefixes = st['sourcePrefixes'] as Record<string, string> | undefined;
+    return { priority: prio?.[tool], proxyPrefixes: prefixes };
+  };
   const entryOf = (tool: string): CatalogEntry => {
     const e = s.catalogs().get(tool);
     if (!e) throw new CoreError('unknown-tool', `目录中无工具:${tool}`);
-    return e;
+    return applyCatalogPrefs(e, prefsFor(tool));
   };
+  /** 首选源按"偏好序 ∧ 覆盖范围"重决(latestOnly 只兜该 major 最新版) */
+  const preferredOf = (v: DiscoveredVersion, entry: CatalogEntry): string =>
+    preferByPriority(v, entry.sources) || v.preferredSourceId || entry.sources[0]!.id;
   const ctx = (): InstallContext => ({ devRoot: requireDevRoot(s), downloader: s.downloader(), store: s.store, history: s.history });
   const findVersion = async (entry: CatalogEntry, version: string): Promise<DiscoveredVersion> => {
     const vs = await versionsOf(s, entry, false);
@@ -64,6 +77,7 @@ export function registerIpc(): void {
         displayName: c.displayName,
         installedCount: installs.filter((i) => i.tool === c.id).length,
         currentVersion: installs.find((i) => i.tool === c.id && i.isCurrent)?.version ?? null,
+        sourceIds: c.sources.map((x) => x.id),
       }));
     }),
   );
@@ -72,13 +86,13 @@ export function registerIpc(): void {
     wrap(async () => {
       const entry = entryOf(req.tool);
       const vs = await versionsOf(s, entry, Boolean(req.force));
-      const sourceIds = entry.sources.map((x) => x.id);
+      const sourceIds = entry.sources.map((x) => x.id); // 已按 §4.6 优先级重排(entryOf)
       return vs.map((v) => ({
         tool: v.tool,
         version: v.version,
         size: v.size ?? null,
         sourceIds,
-        preferredSourceId: v.preferredSourceId || sourceIds[0] || '',
+        preferredSourceId: preferredOf(v, entry),
         asset: v.asset,
       }));
     }),
@@ -90,6 +104,7 @@ export function registerIpc(): void {
       const entry = entryOf(req.tool);
       const ver = await findVersion(entry, req.version);
       const taskId = `${entry.id}-${ver.version}`;
+      const sourceId = req.sourceId ?? preferredOf(ver, entry); // 未显式换源 → 按 §4.6 优先级重决
       const send = (status: DownloadTaskStatus, extra: Partial<DownloadProgressEvent> = {}): void => {
         if (e.sender.isDestroyed()) return;
         const ev: DownloadProgressEvent = { id: taskId, tool: entry.id, version: ver.version, status, received: 0, total: -1, speed: 0, ...extra };
@@ -97,7 +112,7 @@ export function registerIpc(): void {
       };
       send('queued');
       // fire-and-forget:invoke 立即返回,整包下载/解压完成再推终态(否则 IPC 卡住,§8)
-      void install(entry, ver, { sourceId: req.sourceId, onProgress: (p) => send('downloading', { received: p.received, total: p.total, speed: p.speed }) }, ctx())
+      void install(entry, ver, { sourceId, onProgress: (p) => send('downloading', { received: p.received, total: p.total, speed: p.speed }) }, ctx())
         .then(() => send('done', { received: 1, total: 1, speed: 0 }))
         .catch((err: unknown) => {
           const info = errInfo(err);
@@ -137,12 +152,55 @@ export function registerIpc(): void {
 
   // —— 环境状态(受管条目是否已接入;顶栏黄条 + 向导 diff 依据)
   ipcMain.handle(Channel.EnvState, () => wrap(() => envState(s)));
-  ipcMain.handle(Channel.EnvAudit, () => Promise.resolve(fail('not-implemented', 'PATH 体检属 M3(技术手册 §13)')));
-  ipcMain.handle(Channel.EnvPrune, () => Promise.resolve(fail('not-implemented', 'PATH 清理属 M3(技术手册 §13)')));
+
+  // —— §4.4 环境体检:M3 补实(复用 core paths.classifyPathEntries/auditPathEntries,不重写原语)
+  ipcMain.handle(Channel.EnvAudit, () =>
+    wrap(async (): Promise<EnvAuditView> => {
+      const devRoot = s.getDevRoot();
+      const rows = await s.env.readAll();
+      const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
+      const javaRow = rows.find((r) => r.name.toLowerCase() === 'java_home');
+      const systemValue = await s.env.readSystemPath();
+      // 展开口径:%JAVA_HOME% 按注册表现值(非 process.env 的陈旧值),其余变量走进程环境
+      const envMap: NodeJS.ProcessEnv = { ...process.env };
+      if (javaRow?.value) envMap['JAVA_HOME'] = javaRow.value;
+      const cls = classifyPathEntries({
+        userValue: pathRow?.value ?? '',
+        systemValue,
+        managedEntries: devRoot ? envPlan(devRoot).pathEntries : [],
+        expand: (x) => expandPathVars(x, envMap),
+      });
+      return {
+        devRoot,
+        managed: devRoot ? managedEntries(devRoot, rows) : [],
+        rows: cls.rows,
+        systemReadable: systemValue !== null, // HKLM 读不到 → UI 注明"仅覆盖用户 PATH"
+        summary: cls.summary,
+      };
+    }),
+  );
+
+  // —— §4.4 清理所选:仅删用户 PATH 精确命中项;红线守卫集中在这一层(core applyRemoval 保持通用)
+  ipcMain.handle(Channel.EnvPrune, (_e, req: { entries: string[] }) =>
+    wrap(async () => {
+      const devRoot = requireDevRoot(s);
+      const plan = envPlan(devRoot);
+      const hit = req.entries.filter((x) => plan.pathEntries.some((m) => pathEntryEquals(m, x) || pathEntryEquals(m, expandPathVars(x))));
+      if (hit.length > 0) throw new CoreError('prune-protected', `拒删本工具受管条目(接入/重连只走向导):${hit.join(' ; ')}`);
+      const t0 = Date.now();
+      const r = await s.env.applyRemoval(req.entries); // §7.2 快照→删→广播→失败还原
+      if (r.removed.length > 0) {
+        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { via: 'prune', removed: r.removed }, backupFile: r.backupFile ?? undefined });
+      }
+      return { removed: r.removed, backupFile: r.backupFile, broadcast: r.broadcast };
+    }),
+  );
+
   ipcMain.handle(Channel.EnvRestore, (_e, req: { file: string }) =>
     wrap(async () => {
+      const t0 = Date.now();
       const r = await s.env.restoreBackup(req.file);
-      s.history.append({ kind: 'env_restore', ok: true, durationMs: 0, detail: { changed: r.changed } });
+      s.history.append({ kind: 'env_restore', ok: true, durationMs: Date.now() - t0, detail: { changed: r.changed, from: req.file } });
       return null;
     }),
   );
@@ -155,13 +213,28 @@ export function registerIpc(): void {
     ),
   );
 
-  // —— 设置
+  // —— 设置(§4.6):入口边界清洗(§12),非法值经 Result 归一,不裸抛
   ipcMain.handle(Channel.SettingsGet, () => wrap(() => settingsView(s)));
   ipcMain.handle(Channel.SettingsSet, (_e, patch: Partial<SettingsView>) =>
     wrap(() => {
-      s.store.update((d) => ({ ...d, settings: { ...d.settings, ...(patch as Record<string, unknown>) } }));
-      if (typeof patch.devRoot === 'string') s.setDevRoot(patch.devRoot);
+      const clean = sanitizeSettingsPatch(patch);
+      s.store.update((d) => ({ ...d, settings: { ...d.settings, ...clean } }));
+      if (typeof clean['devRoot'] === 'string') {
+        ensureDevRoot(clean['devRoot']); // 新根即建骨架(§5);"不迁移已有"由页面文案承担(§4.6)
+        s.setDevRoot(clean['devRoot']);
+      }
+      if (clean['proxy'] !== undefined) s.applyNetwork(); // 代理 URL → 全局 undici dispatcher
       return settingsView(s);
+    }),
+  );
+
+  // —— §4.6 [清理缓存]:活动下载期间拒绝(断点文件可能正被写)
+  ipcMain.handle(Channel.CacheClear, () =>
+    wrap(() => {
+      const devRoot = requireDevRoot(s);
+      const active = s.downloader().activeIds;
+      if (active.length > 0) throw new CoreError('cache-busy', `有 ${active.length} 个下载进行中,完成后再清理缓存`);
+      return clearDownloadCache(devRoot);
     }),
   );
 
@@ -218,26 +291,95 @@ function requireDevRoot(s: Services): string {
   return d;
 }
 
-async function envState(s: Services) {
+async function envState(s: Services): Promise<EnvStateView> {
   const devRoot = s.getDevRoot();
   const backups = s.env.listBackups().map((b) => ({ ts: b.ts, file: b.file, names: b.names }));
   if (!devRoot) return { devRoot: null, wired: false, entries: [], backups };
-  const plan = envPlan(devRoot);
   const rows = await s.env.readAll();
+  const entries = managedEntries(devRoot, rows);
+  return { devRoot, wired: entries.every((e) => e.present), entries, backups };
+}
+
+/**
+ * 受管区装配(env:state 与 env:audit 共用):
+ * present = 用户 PATH 等值含该项 / JAVA_HOME 值等于 plan;
+ * targetOk = 目标目录存在(%VAR% 按注册表 JAVA_HOME 现值展开)——
+ * 决策 A:present✓ 而 targetOk✗ 即"⚠ 失效/悬空"(装了 Maven 未装 JDK 等),只暴露不规避。
+ */
+function managedEntries(devRoot: string, rows: EnvVar[]): ManagedEntryView[] {
+  const plan = envPlan(devRoot);
   const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
   const javaRow = rows.find((r) => r.name.toLowerCase() === 'java_home');
   const parts = splitPathList(pathRow?.value ?? '');
-  const entries: ManagedEntryView[] = plan.pathEntries.map((pe) => ({ label: pe, kind: 'path', value: pe, present: parts.some((p) => pathEntryEquals(p, pe)) }));
-  entries.push({ label: 'JAVA_HOME', kind: 'java_home', value: plan.javaHome, present: (javaRow?.value ?? '') === plan.javaHome });
-  return { devRoot, wired: entries.every((e) => e.present), entries, backups };
+  const envMap: NodeJS.ProcessEnv = { ...process.env };
+  if (javaRow?.value) envMap['JAVA_HOME'] = javaRow.value;
+  const entries: ManagedEntryView[] = plan.pathEntries.map((pe) => ({
+    label: pe,
+    kind: 'path',
+    value: pe,
+    present: parts.some((p) => pathEntryEquals(p, pe)),
+    targetOk: existsSync(expandPathVars(pe, envMap)),
+  }));
+  entries.push({
+    label: 'JAVA_HOME',
+    kind: 'java_home',
+    value: plan.javaHome,
+    present: (javaRow?.value ?? '') === plan.javaHome,
+    targetOk: existsSync(plan.javaHome), // 悬空 JDK 链:junction 不存在 → false
+  });
+  return entries;
+}
+
+/** §4.6 设置写入边界清洗:只放行可编辑键(cache/appVersion/catalogVersion 是派生值,拒收) */
+function sanitizeSettingsPatch(patch: Partial<SettingsView>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const isHttpUrl = (s: string): boolean => /^https?:\/\/\S+$/i.test(s);
+  if (patch.devRoot !== undefined) {
+    if (typeof patch.devRoot !== 'string') throw new CoreError('bad-devroot', 'DevRoot 不能为空');
+    const r = checkDevRoot(patch.devRoot);
+    if (!r.ok) throw new CoreError('bad-devroot', r.reasons.join(';'));
+    out.devRoot = patch.devRoot;
+  }
+  if (patch.proxy !== undefined) {
+    const p = patch.proxy.trim();
+    if (p && !isHttpUrl(p)) throw new CoreError('bad-proxy', '代理须为 http(s):// 开头的 URL(留空=跟随系统)');
+    out.proxy = p;
+  }
+  if (patch.concurrency !== undefined) {
+    const c = Math.floor(patch.concurrency);
+    if (!(c >= 1 && c <= 6)) throw new CoreError('bad-concurrency', '并发数须为 1~6 的整数');
+    out.concurrency = c;
+  }
+  if (patch.sourcePriority !== undefined) {
+    const clean: Record<string, string[]> = {};
+    for (const [tool, ids] of Object.entries(patch.sourcePriority)) {
+      if (Array.isArray(ids)) clean[tool] = ids.filter((x) => typeof x === 'string');
+    }
+    out.sourcePriority = clean;
+  }
+  if (patch.sourcePrefixes !== undefined) {
+    const clean: Record<string, string> = {};
+    for (const [id, v] of Object.entries(patch.sourcePrefixes)) {
+      const t = typeof v === 'string' ? v.trim() : '';
+      if (t && !isHttpUrl(t)) throw new CoreError('bad-prefix', `源 ${id} 的代理前缀须为 http(s):// URL(留空=直连)`);
+      clean[id] = t;
+    }
+    out.sourcePrefixes = clean;
+  }
+  return out;
 }
 
 function settingsView(s: Services): SettingsView {
   const st = s.store.load().settings as Record<string, unknown>;
+  const devRoot = typeof st['devRoot'] === 'string' && st['devRoot'].length > 0 ? (st['devRoot'] as string) : null;
   return {
-    devRoot: typeof st['devRoot'] === 'string' ? (st['devRoot'] as string) : null,
+    devRoot,
     sourcePriority: (st['sourcePriority'] as Record<string, string[]>) ?? {},
     proxy: typeof st['proxy'] === 'string' ? (st['proxy'] as string) : '',
     concurrency: typeof st['concurrency'] === 'number' ? (st['concurrency'] as number) : 2,
+    sourcePrefixes: (st['sourcePrefixes'] as Record<string, string>) ?? {},
+    cache: devRoot ? cacheStats(devRoot) : null,
+    appVersion: app.getVersion(),
+    catalogVersion: s.catalogVersion(),
   };
 }

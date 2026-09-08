@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 应用框架(产品 §4:侧边栏 4 页 + 顶栏下载指示)。M2 只实装 商店/已安装 两页,环境·历史·设置为 M3 占位。
+// 应用框架(产品 §4:侧边栏 4 页 + 顶栏下载指示)。M2 实装 商店/已安装,M3 补齐 环境/历史/设置 —— 五页全真。
 import { computed, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NConfigProvider, NMessageProvider, NDialogProvider, NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NMenu, NIcon, zhCN, dateZhCN } from 'naive-ui';

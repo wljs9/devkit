@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, type Component } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { NDialogProvider, NMessageProvider } from 'naive-ui';
-import type { DevkitApi } from '../../src/shared/ipc';
+import type { DevkitApi, EnvAuditView } from '../../src/shared/ipc';
 
 function ok<T>(data: T) {
   return Promise.resolve({ ok: true as const, data });
@@ -47,7 +47,7 @@ describe('Environment.vue(§4.4)', () => {
           ],
           systemReadable: true,
           summary: { total: 23, missing: 2, duplicates: 1 },
-        }),
+        } satisfies EnvAuditView),
       ),
       envState: vi.fn(() =>
         ok({

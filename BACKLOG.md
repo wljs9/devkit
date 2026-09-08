@@ -43,3 +43,4 @@ pnpm test             # 全绿(当前基线 100 例,新测试只增不减)
 pnpm dist             # 动了 catalog/打包链/主进程时:四段全绿,release/ 出新包
 ```
 每轮 commit 信息注明修复项编号(S1/S2/S3/B#),安全项修复后建议再跑一遍 `/security-review`。
+经用户验收后同步远端:`git push origin main --follow-tags`(远端 wljs9/devkit 私有;凭据在 Windows 凭据管理器,PAT 约 2026-11-07 过期;网络取决于加速器开关,见 CLAUDE.md 仓库事实)。

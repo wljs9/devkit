@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { classifyNetworkError, Downloader, DownloadError, type DownloadOutcome } from '../src/main/core/download';
+import { classifyNetworkError, cacheStats, clearDownloadCache, Downloader, DownloadError, type DownloadOutcome } from '../src/main/core/download';
 import { partPaths } from '../src/main/core/paths';
 import { startFileServer, type TestServer } from './helpers/server';
 
@@ -166,5 +166,51 @@ describe('Downloader 主流程(§7.4)', () => {
     expect(classifyNetworkError(Object.assign(new Error('x'), { cause: { code: 'ECONNREFUSED' } }))).toBe('net-connect');
     expect(classifyNetworkError(new Error('AbortError: timeout'))).toBe('net-timeout');
     expect(classifyNetworkError(new Error('weird'))).toBe('io');
+  });
+});
+
+describe('cacheStats / clearDownloadCache(§4.6 清理缓存,M3)', () => {
+  const cacheOf = () => path.join(devRoot, 'cache');
+  function seed(): void {
+    const c = cacheOf();
+    fs.writeFileSync(path.join(c, 'node-22.zip.part'), Buffer.alloc(1000, 1));
+    fs.writeFileSync(path.join(c, 'node-22.zip.part.json'), '{}');
+    fs.mkdirSync(path.join(c, 'x-ab12cd34'), { recursive: true }); // 解压暂存(token 形态=randomUUID().slice(0,8))
+    fs.writeFileSync(path.join(c, 'x-ab12cd34', 'inner.bin'), Buffer.alloc(500, 2));
+    fs.writeFileSync(path.join(c, 'keep.txt'), 'not ours');
+    fs.writeFileSync(path.join(c, 'x-notatoken'), 'file named x-* is not artifact');
+    fs.mkdirSync(path.join(c, 'tools-stored'), { recursive: true });
+  }
+  it('只认 .part/.part.json/x-<token> 暂存目录;其余分毫未动', () => {
+    seed();
+    const before = cacheStats(devRoot);
+    expect(before.files).toBe(3); // part + meta + 暂存目录(目录计 1 项)
+    expect(before.bytes).toBe(1000 + 2 + 500);
+    expect(before.dir).toBe(cacheOf());
+    const r = clearDownloadCache(devRoot);
+    expect(r).toEqual({ files: 3, bytes: 1000 + 2 + 500 });
+    expect(cacheStats(devRoot).files).toBe(0);
+    for (const keep of ['keep.txt', 'x-notatoken', 'tools-stored']) {
+      expect(fs.existsSync(path.join(cacheOf(), keep)), keep).toBe(true);
+    }
+    expect(fs.existsSync(path.join(cacheOf(), 'x-ab12cd34'))).toBe(false);
+  });
+  it('junction 冒名 x-token 也拒删(lstat 判链在先,§7.3 红线)', () => {
+    const realTarget = path.join(devRoot, 'precious');
+    fs.mkdirSync(realTarget);
+    fs.writeFileSync(path.join(realTarget, 'a.txt'), 'x');
+    fs.symlinkSync(realTarget, path.join(cacheOf(), 'x-deadbeef'), 'junction');
+    expect(clearDownloadCache(devRoot)).toEqual({ files: 0, bytes: 0 });
+    expect(fs.existsSync(path.join(realTarget, 'a.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(cacheOf(), 'x-deadbeef'))).toBe(true);
+  });
+  it('cache 目录不存在 → 全零不炸', () => {
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'devkit-nocache-'));
+    try {
+      expect(cacheStats(fresh)).toEqual({ dir: path.join(fresh, 'cache'), files: 0, bytes: 0 });
+      expect(clearDownloadCache(fresh)).toEqual({ files: 0, bytes: 0 });
+    } finally {
+      fs.rmSync(fresh, { recursive: true, force: true });
+    }
   });
 });

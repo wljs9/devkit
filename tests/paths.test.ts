@@ -5,6 +5,7 @@ import {
   currentLinkPath,
   defaultDevRoot,
   envPlan,
+  expandPathVars,
   joinPathList,
   mergePathEntries,
   partPaths,
@@ -86,5 +87,23 @@ describe('PATH 条目代数', () => {
     expect(a.total).toBe(5);
     expect(a.missing).toEqual(['D:\\no\\such']);
     expect(a.duplicates).toEqual([['C:\\Windows', 'C:\\Windows'], ['D:\\no\\such', 'D:\\no\\such']]);
+  });
+});
+
+describe('expandPathVars(§4.4 体检前置,大小写不敏感)', () => {
+  const env = { SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\Users\\me' };
+  it('命中的 %VAR% 展开(变量名大小写不敏感),未知变量与无 %-对保留原文', () => {
+    expect(expandPathVars('%SystemRoot%\\system32;%JAVA_HOME%\\bin;C:\\x%y', env)).toBe(
+      'C:\\Windows\\system32;%JAVA_HOME%\\bin;C:\\x%y',
+    );
+  });
+  it('展开后可交给 auditPathEntries 判存在性(不再被 % 跳过)', () => {
+    const expanded = expandPathVars('%SystemRoot%\\System32', env);
+    const a = auditPathEntries(expanded, (p) => p === 'C:\\Windows\\System32');
+    expect(a.missing).toEqual([]);
+  });
+  it('展开失败(未知变量)保持跳过语义 → 不误报失效', () => {
+    const a = auditPathEntries(expandPathVars('%NOPE%\\bin', env), () => false);
+    expect(a.missing).toEqual([]); // 仍含 %,audit 不判存在性
   });
 });

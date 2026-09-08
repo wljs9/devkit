@@ -10,7 +10,7 @@ import { createHash, type Hash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CoreError } from './errors';
-import { partPaths } from './paths';
+import { cacheDir, partPaths } from './paths';
 
 export type HashAlgo = 'sha256' | 'sha512';
 
@@ -281,6 +281,68 @@ export class Downloader {
       fs.closeSync(fd);
     }
   }
+}
+
+// ---------------------------------------------------------------- 下载缓存清单与清理(§4.6 [清理缓存])
+
+/** cache\ 里"本工具可回收物"的判据:§7.4 断点(*.part / *.part.json)与 §7.5 解压暂存(x-<token>,token=randomUUID().slice(0,8)) */
+function isCacheArtifact(name: string, isFile: boolean): boolean {
+  if (isFile) return name.endsWith('.part') || name.endsWith('.part.json');
+  return /^x-[0-9a-f-]{1,16}$/.test(name);
+}
+
+function dirBytes(dir: string): number {
+  let sum = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isSymbolicLink()) continue; // 红线 §7.3:递归统计也绝不穿链接
+    const p = path.join(dir, e.name);
+    sum += e.isDirectory() ? dirBytes(p) : safeSize(p);
+  }
+  return sum;
+}
+
+function safeSize(p: string): number {
+  try {
+    return fs.statSync(p).size;
+  } catch {
+    return 0;
+  }
+}
+
+function listCacheArtifacts(devRoot: string): { p: string; bytes: number }[] {
+  const dir = cacheDir(devRoot);
+  if (!fs.existsSync(dir)) return [];
+  const out: { p: string; bytes: number }[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    let st: fs.Stats;
+    try {
+      st = fs.lstatSync(p); // lstat:判链在先,链接永不进回收名单(§7.3 红线)
+    } catch {
+      continue;
+    }
+    if (!isCacheArtifact(name, st.isFile())) continue;
+    if (st.isSymbolicLink()) continue;
+    out.push({ p, bytes: st.isFile() ? st.size : dirBytes(p) });
+  }
+  return out;
+}
+
+/** 缓存占用(设置页展示) */
+export function cacheStats(devRoot: string): { dir: string; files: number; bytes: number } {
+  const items = listCacheArtifacts(devRoot);
+  return { dir: cacheDir(devRoot), files: items.length, bytes: items.reduce((a, b) => a + b.bytes, 0) };
+}
+
+/** 清理缓存:只删断点与解压暂存,其他文件(含安装产物)一概不碰 */
+export function clearDownloadCache(devRoot: string): { files: number; bytes: number } {
+  const items = listCacheArtifacts(devRoot);
+  let bytes = 0;
+  for (const it of items) {
+    fs.rmSync(it.p, { recursive: true, force: true });
+    bytes += it.bytes;
+  }
+  return { files: items.length, bytes };
 }
 
 function currentSize(p: string): number {

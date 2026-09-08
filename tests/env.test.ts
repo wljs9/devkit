@@ -128,6 +128,66 @@ describe('applyPlan 写入协议(§7.2 四步)', () => {
   });
 });
 
+describe('applyRemoval(§4.4 清理:§7.2 四步应用于删除方向)', () => {
+  const RAW = 'C:\\Windows;D:\\junk\\x;D:\\dev\\current\\node;%JAVA_HOME%\\bin';
+
+  it('快照→等值删除→写 ExpandString→广播;快照=删除前原值', async () => {
+    const { calls, fn } = mockExec((c) => (c.includes('Get-Env') ? readRows([{ name: 'Path', kind: 'ExpandString', value: RAW }]) : 'OK\nBROADCAST_OK'));
+    const svc = svcWith(fn, userData);
+    const r = await svc.applyRemoval(['D:\\junk\\x']);
+    expect(r).toEqual({ changed: ['Path'], removed: ['D:\\junk\\x'], backupFile: expect.any(String), broadcast: 'ok' });
+    const write = calls[1]!.calls;
+    expect(write).toContain(`Set-Env -Key 'Environment' -Name 'Path' -Value 'C:\\Windows;D:\\dev\\current\\node;%JAVA_HOME%\\bin' -Kind ExpandString`);
+    expect(write).toContain('Publish-EnvChange');
+    const backup = JSON.parse(fs.readFileSync(r.backupFile!, 'utf8')) as { rows: EnvVar[] };
+    expect(backup.rows[0]!.value).toBe(RAW); // %JAVA_HOME% 在快照里不被打平
+  });
+
+  it('删除仅等值命中(大小写/尾分隔符容错),绝不模糊匹配(红线 §3.3)', async () => {
+    const { fn } = mockExec((c) => (c.includes('Get-Env') ? readRows([{ name: 'Path', kind: 'ExpandString', value: 'C:\\WINDOWS\\;D:\\WINDOWS\\System32' }]) : 'OK'));
+    const r = await svcWith(fn, userData).applyRemoval(['c:\\windows']);
+    expect(r.removed).toEqual(['C:\\WINDOWS\\']); // 等值(忽略大小写+尾\)命中
+  });
+
+  it('无命中 → 零写入零备份(noop)', async () => {
+    const { calls, fn } = mockExec(() => readRows([{ name: 'Path', kind: 'ExpandString', value: 'C:\\Windows' }]));
+    const r = await svcWith(fn, userData).applyRemoval(['D:\\absent']);
+    expect(r).toEqual({ changed: [], removed: [], backupFile: null, broadcast: null });
+    expect(calls.length).toBe(1); // 只有 readAll
+  });
+
+  it('写入失败 → 用快照还原并 rethrow(§7.2④)', async () => {
+    const MERGED = 'C:\\Windows;D:\\dev\\current\\node;%JAVA_HOME%\\bin'; // 删后形态(模拟"写已落半程再炸")
+    let reads = 0;
+    let writes = 0;
+    const { calls, fn } = mockExec((c) => {
+      if (c.includes('Get-Env')) {
+        reads++;
+        return readRows([{ name: 'Path', kind: 'ExpandString', value: reads === 1 ? RAW : MERGED }]);
+      }
+      writes++;
+      if (writes === 1) throw new Error('registry write boom'); // 删除写入崩
+      return 'OK\nBROADCAST_OK'; // 还原写成功
+    });
+    const svc = svcWith(fn, userData);
+    await expect(svc.applyRemoval(['D:\\junk\\x'])).rejects.toThrowError(/boom/);
+    expect(calls.at(-1)!.calls).toContain(`-Value '${RAW}' -Kind ExpandString`); // 还原为快照原值
+  });
+});
+
+describe('readSystemPath(只读 HKLM,§4.4 系统条目区)', () => {
+  it('调用 Get-SystemPath 并解析 JSON value', async () => {
+    const { calls, fn } = mockExec(() => JSON.stringify({ name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32;%SystemRoot%\\x' }));
+    expect(await svcWith(fn, userData).readSystemPath()).toBe('C:\\Windows\\system32;%SystemRoot%\\x');
+    expect(calls[0]!.calls.trim()).toBe('Get-SystemPath');
+  });
+  it('空返回/无 value/进程失败 → null 降级(不阻塞用户 PATH 体检)', async () => {
+    expect(await svcWith(mockExec(() => '{}').fn, userData).readSystemPath()).toBeNull();
+    expect(await svcWith(mockExec(() => 'nope').fn, userData).readSystemPath()).toBeNull();
+    expect(await svcWith(mockExec(() => { throw new Error('denied'); }).fn, userData).readSystemPath()).toBeNull();
+  });
+});
+
 describe('restoreBackup', () => {
   it('删除多余项 + 写回漂移项,并广播', async () => {
     const target: EnvVar[] = [{ name: 'Path', kind: 'ExpandString', value: 'OLD' }];
@@ -172,6 +232,20 @@ describe.skipIf(process.platform !== 'win32')('EnvService 真机链路(HKCU:\\' 
 
       const r2 = await svc.applyPlan(PLAN); // 幂等
       expect(r2.changed).toEqual([]);
+
+      // M3 §4.4 清理真机:精确删一条,其余原样(%JAVA_HOME% 不被打平),备份可回滚
+      const r4 = await svc.applyRemoval(['D:\\dev\\current\\node']);
+      expect(r4.removed).toEqual(['D:\\dev\\current\\node']);
+      const after = await svc.readAll();
+      expect(after.find((x) => x.name.toLowerCase() === 'path')!.value).toBe('D:\\dev\\current\\maven\\bin;%JAVA_HOME%\\bin');
+      await svc.restoreBackup(r4.backupFile!); // 撤销清理
+      expect((await svc.readAll()).find((x) => x.name.toLowerCase() === 'path')!.value)
+        .toBe(['D:\\dev\\current\\node', 'D:\\dev\\current\\maven\\bin', '%JAVA_HOME%\\bin'].join(';'));
+
+      // 系统 PATH 只读探测(真机,零写入;本机必有值)
+      const sys = await svc.readSystemPath();
+      expect(sys).toBeTruthy();
+      expect(sys!.toLowerCase()).toContain('system32');
 
       const r3 = await svc.restoreBackup(r1.backupFile!); // 回到"接入前"= 空
       expect(r3.changed.sort()).toEqual(['JAVA_HOME', 'Path']);

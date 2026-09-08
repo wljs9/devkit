@@ -159,6 +159,19 @@ export function removePathEntries(currentValue: string, remove: string[]): { val
   return { value: joinPathList(kept), changed: removed.length > 0, removed };
 }
 
+/**
+ * 展开 PATH 条目里的 %VAR% 引用(大小写不敏感;env 可注入,M3 体检传 process.env)。
+ * 表内无此变量 → 原文保留 —— auditPathEntries"含 % 跳过存在性判定"的既有约定不变,
+ * 本函数只让它少跳过头(能展开的先展开再判)。M3 env:audit 消费。
+ */
+export function expandPathVars(value: string, env: NodeJS.ProcessEnv = process.env): string {
+  return value.replace(/%([^%;]+)%/g, (all, name: string) => {
+    const hit = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
+    const v = hit === undefined ? undefined : env[hit];
+    return v === undefined ? all : v;
+  });
+}
+
 /** PATH 体检原语(供 env.ts 的 audit 使用):失效项 + 重复项 */
 export function auditPathEntries(currentValue: string, exists: (p: string) => boolean = existsSync): {
   total: number;

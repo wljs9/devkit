@@ -25,6 +25,18 @@ function Get-Env {
   return (ConvertTo-Json -InputObject @($rows) -Compress)
 }
 
+function Get-SystemPath {
+  # 只读:M3 §4.4 体检的"系统 PATH"区。红线 §3.1 —— 本文件一切写口都钉死 CurrentUser,
+  # HKLM 仅开读句柄;DoNotExpandEnvironmentNames 保 %SystemRoot% 等原样,展示层自决展开。
+  $sub = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+  if ($null -eq $sub) { return '{}' }
+  $raw = $sub.GetValue('Path', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+  if ($null -eq $raw) { $sub.Close(); return '{}' }
+  $kind = [string]$sub.GetValueKind('Path')
+  $sub.Close()
+  return (ConvertTo-Json -InputObject ([pscustomobject]@{ name = 'Path'; kind = $kind; value = [string]$raw }) -Compress)
+}
+
 function Set-Env {
   [CmdletBinding()]
   param(

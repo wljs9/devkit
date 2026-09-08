@@ -208,6 +208,26 @@ describe('安装全链路:下载→校验→解压→建链→读回(§11)', () 
     await expect(install(entry, verOf(V1), {}, ctx(entry))).rejects.toThrowError(/校验和不匹配/);
   });
 
+  it('代理前缀源:下载必须真正带前缀请求(M3 JDK ghproxy 接线回归 —— 曾因绕过 fileUrlFor 而直连)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    sidecars[V1] = createHash('sha512').update(buf).digest('hex');
+    const parsed = CatalogEntrySchema.safeParse({
+      id: PKG, displayName: 'fx', listKind: 'dirIndex',
+      dirRegex: '^node-(?<ver>\\d+\\.\\d+\\.\\d+)/$', fileRegex: '^pkg-\\d.*\\.zip$',
+      sources: [{ id: 'gh', listUrl: `${srv.url}/`, fileUrl: `${srv.url}/pkg-{ver}.zip`, proxy: { kind: 'prefix', value: `${srv.url}/wrap/` } }],
+      checksum: { kind: 'officialSidecar', algo: 'sha512', urls: [`${srv.url}/sha512/{ver}`] },
+      rootDir: `${PKG}-{ver}`, layout: 'binAtRoot',
+    });
+    if (!parsed.success) throw new Error(parsed.error.message);
+    const entry = parsed.data;
+    const rec = await install(entry, { ...verOf(V1), preferredSourceId: 'gh' }, {}, ctx(entry));
+    expect(srv.requests.some((r) => r.path.startsWith('/wrap/'))).toBe(true); // 实际 HTTP 请求经过代理前缀
+    expect(rec.sourceUrl).toContain('/wrap/'); // 登记的下载 URL = 真请求 URL
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+  });
+
   it('卸载红线:版本路径若被换成 junction,第一道闸必须拦住递归删除(§7.3)', async () => {
     const entry = await addServer(V1);
     await install(entry, verOf(V1), {}, ctx(entry));

@@ -12,7 +12,7 @@ import { CoreError } from './errors';
 import { Downloader, type DownloadProgress, type HashAlgo } from './download';
 import { assertDeletableRealDir, ensureJunction, inspectLink, removeJunction, switchJunction } from './junction';
 import { cacheDir, currentLinkPath, extractTempDir, toolVersionDir, versionDir } from './paths';
-import { renderTemplate, sourceOf, type CatalogEntry, type DiscoveredVersion } from './catalog';
+import { fileUrlFor, renderTemplate, sourceOf, type CatalogEntry, type DiscoveredVersion } from './catalog';
 import type { HistoryLog } from './history';
 import type { InstallRecord, JsonRepository } from './store';
 
@@ -89,7 +89,9 @@ export async function install(
   const t0 = Date.now();
   const src = sourceOf(entry, opts.sourceId ?? ver.preferredSourceId ?? entry.sources[0]!.id);
   const vars = varsOf(entry, ver, src.id);
-  const url = renderTemplate(src.fileUrl, vars);
+  // ★ 必须走 fileUrlFor 而非 renderTemplate(src.fileUrl):proxy 前缀(ghproxy 等)在 fileUrlFor 内拼接,
+  //   M2 及以前绕过它 → 带前缀源(JDK 历史版本)会直连不可达。M3 "JDK 接真"的接线点。
+  const url = fileUrlFor(entry, src.id, vars);
   const target = toolVersionDir(ctx.devRoot, entry.id, ver.version);
   const done = (ok: boolean, extra: Record<string, unknown>): void => {
     ctx.history.append({ kind: 'install', ok, durationMs: Date.now() - t0, detail: { tool: entry.id, version: ver.version, sourceId: src.id, ...extra } });

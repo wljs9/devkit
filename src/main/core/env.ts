@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { CoreError } from './errors';
-import { mergePathEntries, type EnvPlan } from './paths';
+import { mergePathEntries, removePathEntries, type EnvPlan } from './paths';
 
 export interface EnvVar {
   name: string;
@@ -30,6 +30,16 @@ export interface EnvApplyResult {
   backupFile: string | null;
   /** 广播结果:null=本次无写入未广播 */
   broadcast: 'ok' | 'timeout' | null;
+}
+
+/** applyRemoval 返回:在 EnvApplyResult 之上带实际删除的条目原文(§4.4 清理结果展示) */
+export interface EnvRemovalResult extends EnvApplyResult {
+  removed: string[];
+}
+
+/** BROADCAST_OK/BROADCAST_TIMEOUT 标记解析(§7.1 Publish-EnvChange 的 stdout) */
+function broadcastOf(out: string): EnvApplyResult['broadcast'] {
+  return /BROADCAST_OK/.test(out) ? 'ok' : /BROADCAST_TIMEOUT/.test(out) ? 'timeout' : null;
 }
 
 export type ExecFileFn = (cmd: string, args: readonly string[]) => Promise<{ stdout: string }>;
@@ -120,8 +130,7 @@ export class EnvService {
     calls.push('Publish-EnvChange');
     try {
       const out = await this.runPowerShell(calls);
-      const broadcast: EnvApplyResult['broadcast'] = /BROADCAST_OK/.test(out) ? 'ok' : /BROADCAST_TIMEOUT/.test(out) ? 'timeout' : null;
-      return { changed, backupFile, broadcast };
+      return { changed, backupFile, broadcast: broadcastOf(out) };
     } catch (e) {
       // ④:尽力还原;还原也失败则把二次错误挂到原错误 context 上,仍 rethrow 原错误
       try {
@@ -130,6 +139,50 @@ export class EnvService {
         if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
       }
       throw e;
+    }
+  }
+
+  /**
+   * §4.4 PATH 清理:§7.2 四步应用于"删除"方向(快照→removePathEntries 仅等值命中→写+广播→失败还原)。
+   * 受管条目(本工具 3 条)的拦截责任在壳层 ipc(决策 A:受管项只经向导接入/重连,不经清理删除);
+   * removePathEntries 本身只做等值精确匹配,是红线 §3.3"绝不模糊删"的底层保障。
+   */
+  async applyRemoval(remove: string[]): Promise<EnvRemovalResult> {
+    const rows = await this.readAll();
+    const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
+    const res = removePathEntries(pathRow?.value ?? '', remove);
+    if (!res.changed) return { changed: [], removed: [], backupFile: null, broadcast: null };
+    const backupFile = this.writeBackup(rows);
+    const calls = [
+      `Set-Env -Key ${psLiteral(this.regKey)} -Name 'Path' -Value ${psLiteral(res.value)} -Kind ExpandString`,
+      'Publish-EnvChange',
+    ];
+    try {
+      const out = await this.runPowerShell(calls);
+      return { changed: ['Path'], removed: res.removed, backupFile, broadcast: broadcastOf(out) };
+    } catch (e) {
+      try {
+        await this.restoreTo(rows);
+      } catch (restoreErr) {
+        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * 系统 PATH(HKLM\SYSTEM\…\Environment,只读,不展开 %VAR%)——§4.4 体检的"系统"条目区。
+   * 红线 §3.1:读可以,写绝不(本服务所有写口都钉死 CurrentUser);读取失败按"无系统项"降级,不阻塞用户 PATH 体检。
+   */
+  async readSystemPath(): Promise<string | null> {
+    try {
+      const out = await this.runPowerShell(['Get-SystemPath']);
+      const line = out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('{'));
+      if (!line) return null;
+      const o = JSON.parse(line) as { value?: string };
+      return typeof o.value === 'string' && o.value.length > 0 ? o.value : null;
+    } catch {
+      return null;
     }
   }
 

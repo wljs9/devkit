@@ -130,6 +130,53 @@ export function checksumUrlsFor(entry: CatalogEntry, vars: TemplateVars): string
   return (c.urls ?? []).map((u) => renderTemplate(u, vars));
 }
 
+// ---------------------------------------------------------------- 设置覆盖(§4.6,M3)
+
+export interface CatalogPrefs {
+  /** 源 id 优先级(商店页拖排结果):列出的按序排前,未列出的保持原有相对次序在后 */
+  priority?: string[];
+  /** 源 id → 代理前缀覆盖(风险登记 §12:ghfast.top 可换):''=显式去代理直连,未提键=不变 */
+  proxyPrefixes?: Record<string, string>;
+}
+
+/**
+ * 把用户设置作用到清单条目上 —— 返回【新对象】:catalogs() map 是跨请求共享单例,原地改会造成偏好串台。
+ * 这是"JDK/Maven catalog 接真"的设置半边(另半边 = install.ts 经 fileUrlFor 真正拼上 proxy 前缀)。
+ */
+export function applyCatalogPrefs(entry: CatalogEntry, prefs: CatalogPrefs): CatalogEntry {
+  const order = prefs.priority ?? [];
+  const prefixes = prefs.proxyPrefixes ?? {};
+  const rank = new Map(order.map((id, i) => [id, i] as const));
+  const sorted = entry.sources
+    .map((s, i) => ({ s, key: rank.has(s.id) ? (rank.get(s.id) as number) : order.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ s }) => s);
+  const sources = sorted.map((s) => {
+    const p = prefixes[s.id];
+    if (p === undefined) return s;
+    if (p === '') {
+      const copy = { ...s };
+      delete copy.proxy;
+      return copy;
+    }
+    return { ...s, proxy: { kind: 'prefix' as const, value: p } };
+  });
+  return { ...entry, sources };
+}
+
+/**
+ * 优先级生效后重选首选源:按序取第一个【能覆盖该版本】的源。
+ * latestOnly 源(USTC 实测只留各 major 最新构建)的覆盖判定借用发现阶段的信号:
+ * adoptiumApi 发现把"恰为最新构建"的版本 preferredSourceId 指到该源(M1 逻辑),否则跳过它。
+ */
+export function preferByPriority(v: DiscoveredVersion, sources: CatalogSource[]): string {
+  for (const s of sources) {
+    if (s.scope === 'latestOnly' && v.preferredSourceId !== s.id) continue;
+    return s.id;
+  }
+  return v.preferredSourceId;
+}
+
 // ---------------------------------------------------------------- 版本发现
 
 export interface DiscoveredVersion {

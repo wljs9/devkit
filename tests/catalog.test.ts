@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as url from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  applyCatalogPrefs,
   CatalogEntrySchema,
   FileCachePort,
   checksumUrlsFor,
@@ -11,6 +12,7 @@ import {
   getVersions,
   listVersions,
   loadCatalogDir,
+  preferByPriority,
   renderTemplate,
   TTL_MS,
 } from '../src/main/core/catalog';
@@ -165,6 +167,56 @@ describe('schema 守门', () => {
     const jdkish = { ...e, listKind: 'adoptiumApi', id: 'jdk2', dirRegex: undefined };
     expect(CatalogEntrySchema.safeParse(jdkish).success).toBe(false); // 无 majors/listApi/releaseFields
     expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'dirIndex', unknownField: 1 }).success).toBe(false); // 禁野字段
+  });
+});
+
+describe('applyCatalogPrefs / preferByPriority(§4.6 设置覆盖,M3)', () => {
+  // jdk 式三源:latestOnly(USTC)+ 两全量源(其一带代理前缀)
+  function jdkishCatalog() {
+    const raw: unknown = {
+      id: 'jdk', displayName: 'JDK', listKind: 'adoptiumApi', majors: [21],
+      listApi: 'https://api.adoptium.invalid/x/{major}',
+      releaseFields: { releaseName: 'r', semver: 's', build: 'b', packageLink: 'p', packageChecksum: 'c', packageSize: 'z' },
+      fileRegex: '^x\\.zip$',
+      sources: [
+        { id: 'ustc-latest', scope: 'latestOnly', fileUrl: 'https://ustc.invalid/{asset}' },
+        { id: 'ghproxy', scope: 'all', fileUrl: 'https://github.invalid/{asset}', proxy: { kind: 'prefix', value: 'https://ghfast.top/' } },
+        { id: 'github-direct', scope: 'all', fileUrl: 'https://github.invalid/{asset}' },
+      ],
+      checksum: { kind: 'adoptiumApi', algo: 'sha256' },
+      rootDir: '{releaseName}', layout: 'binSubdir',
+    };
+    const r = CatalogEntrySchema.safeParse(raw);
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('优先级:列出的按序排前,未列出的保持原相对次序', () => {
+    const out = applyCatalogPrefs(jdkishCatalog(), { priority: ['github-direct'] });
+    expect(out.sources.map((s) => s.id)).toEqual(['github-direct', 'ustc-latest', 'ghproxy']);
+    expect(applyCatalogPrefs(jdkishCatalog(), {}).sources.map((s) => s.id)).toEqual(['ustc-latest', 'ghproxy', 'github-direct']);
+    expect(applyCatalogPrefs(jdkishCatalog(), { priority: ['nope', 'ghproxy'] }).sources.map((s) => s.id)).toEqual(['ghproxy', 'ustc-latest', 'github-direct']); // 未知 id 忽略
+  });
+  it('代理前缀覆盖:换前缀 / 空串去代理直连;不改原对象(单例共享)', () => {
+    const e = jdkishCatalog();
+    const out = applyCatalogPrefs(e, { proxyPrefixes: { ghproxy: 'https://my.proxy/' } });
+    expect(out.sources.find((s) => s.id === 'ghproxy')!.proxy?.value).toBe('https://my.proxy/');
+    const off = applyCatalogPrefs(e, { proxyPrefixes: { ghproxy: '' } });
+    expect(off.sources.find((s) => s.id === 'ghproxy')!.proxy).toBeUndefined();
+    expect(e.sources.find((s) => s.id === 'ghproxy')!.proxy!.value).toBe('https://ghfast.top/'); // 原件未动
+    // 覆盖真生效:fileUrlFor 用新前缀拼 URL
+    expect(fileUrlFor(out, 'ghproxy', { asset: 'a.zip' })).toBe('https://my.proxy/https://github.invalid/a.zip');
+  });
+  it('preferByPriority:按序取首个覆盖源;latestOnly 只管"该 major 最新"', () => {
+    const srcs = jdkishCatalog().sources;
+    const top = { tool: 'jdk', version: '21.0.9', asset: 'a.zip', preferredSourceId: 'ustc-latest' };
+    const old = { tool: 'jdk', version: '21.0.4', asset: 'b.zip', preferredSourceId: 'ghproxy' };
+    expect(preferByPriority(top, srcs)).toBe('ustc-latest');
+    expect(preferByPriority(old, srcs)).toBe('ghproxy'); // 非最新 → 跳过 latestOnly
+    // 用户把 ghproxy 提到最前:两版都首选 ghproxy
+    expect(preferByPriority(top, [srcs[1]!, srcs[0]!, srcs[2]!])).toBe('ghproxy');
+    // 全 latestOnly 且非最新 → 兜底回原 preferredSourceId
+    expect(preferByPriority(old, [srcs[0]!])).toBe('ghproxy');
   });
 });
 

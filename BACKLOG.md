@@ -22,7 +22,7 @@
 - **测试**:`ipc-contract.test.ts` 更新 API 形状;`tests/renderer/*` 桥 mock 同步;main 端校验逻辑可在 `Installed.vue` 冒烟桥间接覆盖(或抽纯函数入 core 直测)。
 - **注意**:M5 若加"打开 cache/备份文件目录"类需求,再评估是否需要受限白名单目录参数——别回到任意路径。
 
-### S3. `env:restore` 的 `file` 参数限定备份目录(4 行加固,审查判 2/10 非漏洞,但值得做)
+### S3. `env:restore` 的 `file` 参数限定备份目录(4 行加固,审查判 2/10 非漏洞,但值得做)✅ 已修(2026-09-09,`EnvService.isBackupFile` 入口闸)
 - **位置**:`src/main/ipc.ts:199-206` → `src/main/core/env.ts:190`(`fs.readFileSync(file)` 无路径约束)
 - **修法**:`EnvService` 加 `isBackupFile(file)`:`path.resolve(file)` 必须落在 `this.backupDir` 下且 basename 匹配 `writeBackup` 命名(`env.ts:245`,形如 `2026-09-08T06-31-12-345.json`);`restoreBackup` 入口拒绝并抛 `CoreError('env-backup-path', …)`。
 - **测试**:`tests/env.test.ts` 补两例——目录外路径拒绝、伪造名拒绝、真备份照常成功。

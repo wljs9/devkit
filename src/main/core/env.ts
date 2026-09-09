@@ -186,8 +186,25 @@ export class EnvService {
     }
   }
 
-  /** 从备份文件回滚(历史页 [回滚] 的后端;M3 接 UI) */
+  /** writeBackup 落盘命名:<ISO 时间戳 :.全替->.json(形如 2026-09-08T06-31-12-345Z.json) */
+  private static readonly BACKUP_NAME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
+
+  /**
+   * ★ S3(2026-09-09 安全审查):回滚只许消费"本服务写出的标准备份"——
+   * 绝对路径的父目录必须恰为 backupDir(嵌套子目录亦拒),且文件名匹配 writeBackup 命名。
+   */
+  isBackupFile(file: string): boolean {
+    if (typeof file !== 'string' || file.length === 0) return false;
+    const abs = path.resolve(file);
+    if (path.dirname(abs).toLowerCase() !== path.resolve(this.backupDir).toLowerCase()) return false;
+    return EnvService.BACKUP_NAME_RE.test(path.basename(abs));
+  }
+
+  /** 从备份文件回滚(历史页 [回滚] 的后端;入口收口见 isBackupFile —— 任意文件路径一律拒) */
   async restoreBackup(file: string): Promise<EnvApplyResult> {
+    if (!this.isBackupFile(file)) {
+      throw new CoreError('env-backup-path', `回滚只接受 ${this.backupDir} 下的标准备份文件:${file}`);
+    }
     const bk = JSON.parse(fs.readFileSync(file, 'utf8')) as EnvBackup;
     if (!Array.isArray(bk?.rows)) throw new CoreError('env-backup-invalid', `备份文件不合法:${file}`);
     const names = await this.restoreTo(bk.rows);

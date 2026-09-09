@@ -189,9 +189,16 @@ describe('readSystemPath(只读 HKLM,§4.4 系统条目区)', () => {
 });
 
 describe('restoreBackup', () => {
+  /** S3 闸口后的合法备份:恰在 env_backups 下 + writeBackup 命名格式 */
+  const legalBackupPath = (userData: string, name = '2026-01-02T03-04-05-678Z.json'): string => {
+    const file = path.join(userData, 'env_backups', name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    return file;
+  };
+
   it('删除多余项 + 写回漂移项,并广播', async () => {
     const target: EnvVar[] = [{ name: 'Path', kind: 'ExpandString', value: 'OLD' }];
-    const file = path.join(userData, 'bk.json');
+    const file = legalBackupPath(userData);
     fs.writeFileSync(file, JSON.stringify({ ts: 'x', regKey: 'Environment', rows: target }));
     const { calls, fn } = mockExec((c) =>
       c.includes('Get-Env') ? readRows([
@@ -204,6 +211,32 @@ describe('restoreBackup', () => {
     const last = calls.at(-1)!.calls;
     expect(last).toContain(`Remove-Env -Key 'Environment' -Name 'GONE_SINCE'`);
     expect(last).toContain(`-Name 'Path' -Value 'OLD'`);
+  });
+
+  it('S3 闸口:目录外 / 伪造名 / backupDir 嵌套子目录 → env-backup-path 拒绝,零执行', async () => {
+    const { calls, fn } = mockExec(() => readRows([]));
+    const svc = svcWith(fn, userData);
+    const payload = JSON.stringify({ ts: 't', regKey: 'Environment', rows: [] as EnvVar[] });
+    const outside = path.join(userData, '2026-01-02T03-04-05-678Z.json'); // 名合法,目录不对
+    fs.writeFileSync(outside, payload);
+    await expect(svc.restoreBackup(outside)).rejects.toThrowError(/回滚只接受/);
+    const forged = legalBackupPath(userData, 'innocent.json'); // 目录对,名不符 writeBackup 命名
+    fs.writeFileSync(forged, payload);
+    await expect(svc.restoreBackup(forged)).rejects.toThrowError(/回滚只接受/);
+    const nested = path.join(userData, 'env_backups', 'sub', '2026-01-02T03-04-05-678Z.json'); // 嵌套也算越界
+    fs.mkdirSync(path.dirname(nested), { recursive: true });
+    fs.writeFileSync(nested, payload);
+    await expect(svc.restoreBackup(nested)).rejects.toThrowError(/回滚只接受/);
+    expect(calls.length).toBe(0); // 三次全部挡在入口,未触 PowerShell
+  });
+
+  it('S3 正路:applyPlan 写出的快照命名与闸口同源,可直接回滚', async () => {
+    const { fn } = mockExec((c) => (c.includes('Get-Env') ? readRows([{ name: 'Path', kind: 'ExpandString', value: 'C:\\Windows' }]) : 'OK\nBROADCAST_OK'));
+    const svc = svcWith(fn, userData);
+    const r = await svc.applyPlan(PLAN);
+    expect(svc.isBackupFile(r.backupFile!)).toBe(true);
+    const rr = await svc.restoreBackup(r.backupFile!); // 现值=快照 → 零变更,但不抛 = 放行
+    expect(rr.changed).toEqual([]);
   });
 });
 

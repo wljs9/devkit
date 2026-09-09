@@ -37,7 +37,7 @@
   2. 用上一步返回的 `upload_url` 上传 `release/devkit-setup-0.1.1.exe`(Content-Type: application/octet-stream,81MB 需耐心/断点重传);
   3. README 的 SHA-256 口径:发布说明里附上 `Get-FileHash` 值,供用户核对。
 - **注意**:~~仓库是私有库,Release 也私有~~ **已执行(2026-09-09)**:用户指示"私人仓库等于没发布",经全历史敏感信息扫描(无 token/私钥/个人信息,PAT 仅存 Windows 凭据管理器)后转 public,Release 随之公开。
-- **状态**:✅ 完成(2026-09-09,v1.0.1 pre-release + 安装包附件,细节见本节做法与 git tag)。
+- **状态**:✅ 完成(2026-09-09)。实况:仓库已转 **public**(全历史扫描无敏感信息后执行);Release id 385207716 = `https://github.com/wljs9/devkit/releases/tag/v1.0.1`(prerelease);附件 `devkit-setup-0.1.1.exe` 85,183,417 B,SHA-256 `92837c564f2feb468e1d73e3dbbf1ca97b733b1332271235d0131348856ce9eb`,匿名下载实测 206;S1 验收中"UI 走查装一次 Node"仍待用户亲测(自动化 111 例 + dist 四段 + 冒烟已绿)。
 
 ## P2 用户后续清单(占位)
 > 用户已明示"bug 修改和功能添加后续再来"。收到清单后:复述范围 → 追加到本节并编号 → 逐项修,勿自动扩权。

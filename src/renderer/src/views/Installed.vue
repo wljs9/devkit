@@ -65,7 +65,8 @@ async function uninstall(i: InstallView): Promise<void> {
   }
 }
 
-const openDir = (p: string): void => void api$.openPath(p).catch((e: DevkitError) => msg.error(e.message));
+// S2 收口:只传 installId,路径由 main 查登记表校验后解析(§4.3 [打开目录])
+const openDir = (i: InstallView): void => void api$.openPath(i.id).catch((e: DevkitError) => msg.error(e.message));
 const mb = (n: number): string => `${(n / 1048576).toFixed(1)} MB`;
 const when = (iso: string): string => iso.replace('T', ' ').slice(0, 19);
 
@@ -105,7 +106,7 @@ watch(() => dlq.doneTick, load); // 下载→装完自动刷新(§4.2 完成后�
             <td style="text-align: right">
               <n-space justify="end" size="small">
                 <n-button size="tiny" :disabled="r.isCurrent" @click="switchTo(r)">设为当前</n-button>
-                <n-button size="tiny" @click="openDir(r.path)">打开目录</n-button>
+                <n-button size="tiny" @click="openDir(r)">打开目录</n-button>
                 <n-popconfirm @positive-click="uninstall(r)">
                   <template #trigger>
                     <n-button size="tiny" type="error" :disabled="r.isCurrent">卸载</n-button>

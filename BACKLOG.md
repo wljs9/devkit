@@ -16,7 +16,7 @@
 
 ## P1 边界加固(审查候选,置信 7/10,建议随下轮改动顺手做)
 
-### S2. `shell:open-path` 收口:契约从任意路径改 installId 查表
+### S2. `shell:open-path` 收口:契约从任意路径改 installId 查表 ✅ 已修(2026-09-09,core 抽 `resolveOpenableInstallDir` 直测)
 - **位置**:`src/main/ipc.ts:280-283`(renderer 字符串零校验直达 `shell.openPath` = ShellExecute,可启动 exe/UNC 触发 SMB)+ `src/preload/index.ts:37` + `src/shared/ipc.ts`(`openPath(p: string)`) + 调用方 `src/renderer/src/views/Installed.vue:68,108`
 - **修法**:契约改 `openPath(installId: string)`;main 端 `s.store.load().installs` 查表取 `path`,校验 `path.resolve` 以 DevRoot+sep 为前缀且 `statSync().isDirectory()` 才放行(复用 `requireDevRoot`);未知 id 抛 `CoreError('unknown-install')`。渲染层只传 id,任意路径字符串彻底消失。
 - **测试**:`ipc-contract.test.ts` 更新 API 形状;`tests/renderer/*` 桥 mock 同步;main 端校验逻辑可在 `Installed.vue` 冒烟桥间接覆盖(或抽纯函数入 core 直测)。

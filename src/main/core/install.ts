@@ -243,6 +243,29 @@ function buildShasumsLineRe(lineMatch: string, ver: string, algo: HashAlgo): Reg
   return new RegExp(`([0-9a-f]{${hex}})\\s+${literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'mi');
 }
 
+/**
+ * ★ S2(2026-09-09 安全审查):shell:open-path 收口 —— 渲染层只持有 installId,目录路径由主进程
+ * 查登记表解析,三道闸后才交给 shell.openPath(= ShellExecute,任意字符串可直达 exe/UNC 是漏洞面):
+ * ①id 必须命中 installs;②解析后必须落在 DevRoot 之内;③必须是真实目录。
+ */
+export function resolveOpenableInstallDir(devRoot: string, installs: InstallRecord[], installId: string): string {
+  const rec = installs.find((i) => i.id === installId);
+  if (!rec) throw new CoreError('unknown-install', `登记表中无安装记录:${installId}`);
+  const base = path.resolve(devRoot) + path.sep;
+  const target = path.resolve(rec.path);
+  if (!target.toLowerCase().startsWith(base.toLowerCase())) {
+    throw new CoreError('open-path-outside', `安装目录不在 DevRoot 内,拒绝打开:${target}`);
+  }
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(target);
+  } catch {
+    throw new CoreError('path-missing', `安装目录已丢失:${target}`);
+  }
+  if (!st.isDirectory()) throw new CoreError('open-path-not-dir', `目标不是目录,拒绝打开:${target}`);
+  return target;
+}
+
 /** DevRoot 就绪性:cache/current/tools 三目录 + 校验(§5) */
 export function ensureDevRoot(devRoot: string): void {
   for (const d of [cacheDir(devRoot), path.join(devRoot, 'tools'), path.join(devRoot, 'current')]) {

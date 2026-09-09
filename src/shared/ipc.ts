@@ -237,8 +237,9 @@ export interface DevkitApi {
   setupRun(req: { devRoot: string }): Promise<Result<SetupRunResult>>;
   /** 轻量:仅 checkDevRoot(不读注册表),向导输入时实时校验用 */
   setupCheck(req: { devRoot: string }): Promise<Result<{ ok: boolean; reasons: string[]; warnings: string[] }>>;
-  /** 原生能力:在资源管理器打开目录(§4.3 [打开目录]) */
-  openPath(p: string): Promise<Result<null>>;
+  /** 原生能力:在资源管理器打开已安装目录(§4.3 [打开目录])。
+   *  ★ S2 收口(2026-09-09):参数是 installs 记录 id 而非路径 —— main 端查表 + DevRoot 前缀 + 目录校验后才 openPath */
+  openPath(installId: string): Promise<Result<null>>;
   /** 首启探测默认 DevRoot + 校验结果(§4.0 步骤 1) */
   setupDefaults(): Promise<Result<{ devRoot: string; check: { ok: boolean; reasons: string[]; warnings: string[] } }>>;
 }

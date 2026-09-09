@@ -11,7 +11,8 @@ import { CatalogEntrySchema, type CatalogEntry, type DiscoveredVersion } from '.
 import { Downloader } from '../src/main/core/download';
 import { HistoryLog } from '../src/main/core/history';
 import { removeJunction } from '../src/main/core/junction';
-import { ensureDevRoot, install, orderChecksumUrls, setCurrent, uninstall } from '../src/main/core/install';
+import { ensureDevRoot, install, orderChecksumUrls, resolveOpenableInstallDir, setCurrent, uninstall } from '../src/main/core/install';
+import type { InstallRecord } from '../src/main/core/store';
 import { currentLinkPath, toolVersionDir } from '../src/main/core/paths';
 import { JsonRepository } from '../src/main/core/store';
 import { makeZip } from './helpers/mkzip';
@@ -297,5 +298,45 @@ describe('S1 校验和跨域背书', () => {
     };
     const rec = await install(entry, verOf(V1), {}, { devRoot, downloader: dl, store, history, fetchText });
     expect(rec.sha256).toBe(good);
+  });
+});
+
+/** S2(2026-09-09 安全审查):open-path 收口 —— installId 查表 + DevRoot 前缀 + 目录闸,渲染层任意路径彻底失效 */
+describe('S2 resolveOpenableInstallDir', () => {
+  const recOf = (id: string, p: string): InstallRecord => ({
+    id, tool: PKG, version: '1.0.0', path: p, sourceId: 'local', sourceUrl: 'http://x/y.zip',
+    sha256: '0'.repeat(64), size: 1, installedAt: new Date().toISOString(), isCurrent: false,
+  });
+
+  it('DevRoot 下的真实目录 → 放行(返回解析后绝对路径)', () => {
+    const dir = path.join(devRoot, 'tools', PKG, '1.0.0');
+    fs.mkdirSync(dir, { recursive: true });
+    expect(resolveOpenableInstallDir(devRoot, [recOf('node-1', dir)], 'node-1')).toBe(dir);
+  });
+
+  it('未知 id → unknown-install(不泄露任何路径给 ShellExecute)', () => {
+    expect(() => resolveOpenableInstallDir(devRoot, [], 'evil')).toThrowError(/登记表中无安装记录/);
+  });
+
+  it('登记路径逃逸 DevRoot → 拒绝;同前缀兄弟目录(C:\\dev 之于 C:\\devkit)也拒(sep 边界闸)', () => {
+    const outside = path.join(os.tmpdir(), 'devkit-outside-x');
+    fs.mkdirSync(outside, { recursive: true });
+    expect(() => resolveOpenableInstallDir(devRoot, [recOf('a', outside)], 'a')).toThrowError(/不在 DevRoot 内/);
+    const sibling = `${devRoot}-evil`; // resolve 后前缀命中但非 DevRoot 子树
+    fs.mkdirSync(sibling, { recursive: true });
+    try {
+      expect(() => resolveOpenableInstallDir(devRoot, [recOf('b', sibling)], 'b')).toThrowError(/不在 DevRoot 内/);
+    } finally {
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('路径丢失 → path-missing;指向文件(非目录)→ open-path-not-dir', () => {
+    const ghost = path.join(devRoot, 'tools', PKG, '9.9.9');
+    expect(() => resolveOpenableInstallDir(devRoot, [recOf('g', ghost)], 'g')).toThrowError(/已丢失/);
+    const file = path.join(devRoot, 'not-a-dir.txt'); // 投毒登记表:让 id 指向日志文件类目标
+    fs.writeFileSync(file, 'x');
+    expect(() => resolveOpenableInstallDir(devRoot, [recOf('f', file)], 'f')).toThrowError(/不是目录/);
   });
 });

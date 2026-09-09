@@ -34,7 +34,7 @@ const api: DevkitApi = {
   setupPreview: (req) => ipcRenderer.invoke(Channel.SetupPreview, req),
   setupRun: (req) => ipcRenderer.invoke(Channel.SetupRun, req),
   setupCheck: (req) => ipcRenderer.invoke(Channel.SetupCheck, req),
-  openPath: (p) => ipcRenderer.invoke(Channel.ShellOpenPath, p),
+  openPath: (installId) => ipcRenderer.invoke(Channel.ShellOpenPath, installId), // S2:只透传 installId
   setupDefaults: () => ipcRenderer.invoke(Channel.SetupDefaults),
 };
 

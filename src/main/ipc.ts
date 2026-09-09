@@ -13,7 +13,7 @@ import {
 import type { EnvVar } from './core/env';
 import { CoreError, isCoreError } from './core/errors';
 import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
-import { install, setCurrent, uninstall, ensureDevRoot, type InstallContext } from './core/install';
+import { install, setCurrent, uninstall, ensureDevRoot, resolveOpenableInstallDir, type InstallContext } from './core/install';
 import { cacheStats, clearDownloadCache, DownloadError } from './core/download';
 import { classifyPathEntries, envPlan, checkDevRoot, expandPathVars, splitPathList, pathEntryEquals, mergePathEntries } from './core/paths';
 import { initServices, suggestDevRoot, versionsOf, type Services } from './services';
@@ -276,11 +276,15 @@ export function registerIpc(): void {
     }),
   );
 
-  // —— 原生:资源管理器打开(§4.3)
-  ipcMain.handle(Channel.ShellOpenPath, async (_e, p: string) => {
-    const err = await shell.openPath(p);
-    return err ? fail('open-path', err) : ok(null);
-  });
+  // —— 原生:资源管理器打开(§4.3)——S2 收口:只收 installId,路径主进程查表解析(渲染层任意字符串彻底消失)
+  ipcMain.handle(Channel.ShellOpenPath, (_e, installId: string) =>
+    wrap(async () => {
+      const dir = resolveOpenableInstallDir(requireDevRoot(s), s.store.load().installs, String(installId));
+      const err = await shell.openPath(dir);
+      if (err) throw new CoreError('open-path', err);
+      return null;
+    }),
+  );
 }
 
 // ---------------------------------------------------------------- 共享小工具

@@ -54,5 +54,6 @@ export const api$ = {
   setupCheck: (devRoot: string) => unwrap(api().setupCheck({ devRoot })),
   setupPreview: (devRoot: string) => unwrap(api().setupPreview({ devRoot })),
   setupRun: (devRoot: string) => unwrap(api().setupRun({ devRoot })),
-  openPath: (p: string) => unwrap(api().openPath(p)),
+  /** S2 收口:传 installs 记录 id(见 shared/ipc DevkitApi.openPath) */
+  openPath: (installId: string) => unwrap(api().openPath(installId)),
 };

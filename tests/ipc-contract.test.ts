@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Channel, PushChannel } from '../src/shared/ipc';
-import type { DownloadProgressEvent, EnvAuditView, InstallView } from '../src/shared/ipc';
+import type { DevkitApi, DownloadProgressEvent, EnvAuditView, InstallView } from '../src/shared/ipc';
 import type { InstallRecord } from '../src/main/core/store';
 
 // 以 (keyof T)[] 标注:字段名漂移/笔误会在【编译期】报错 —— 这才是"防契约漂移"的门禁本意。
@@ -57,6 +57,13 @@ describe('§8 通道全集', () => {
     for (const p of Object.values(PushChannel)) {
       expect(Object.values(Channel)).not.toContain(p);
     }
+  });
+
+  it('S2 收口:openPath 契约签名为 (installId: string) → Result<null>(任意路径不进契约)', () => {
+    // 编译期守卫:把 openPath 钉成"收 installId 出 Result"的形状 —— 参数改回路径对象/多参会在此行类型报错
+    const impl: DevkitApi['openPath'] = (_installId: string) => Promise.resolve({ ok: true as const, data: null });
+    expect(impl.length).toBe(1);
+    return impl('node-22.20.0').then((r) => expect(r).toEqual({ ok: true, data: null }));
   });
 });
 

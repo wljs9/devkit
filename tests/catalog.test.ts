@@ -25,6 +25,18 @@ describe('catalog/ 定稿文件(§6)', () => {
     const entries = loadCatalogDir(dir);
     expect(entries.map((e) => e.id).sort()).toEqual(['jdk', 'maven', 'node']);
   });
+  it('S1 定稿门禁:Node 校验源首位必须是官方 nodejs.org(与默认下载源跨域,镜像 sidecar 只兜底)', () => {
+    const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
+    const node = loadCatalogDir(dir).find((e) => e.id === 'node')!;
+    const first = new URL(node.checksum.urls![0]!);
+    expect(first.hostname).toBe('nodejs.org');
+    // 其余条目允许镜像,但不得再出现"官方与镜像序位颠倒"的回退
+    expect(node.checksum.urls!.map((u) => new URL(u).hostname)).toEqual([
+      'nodejs.org',
+      'mirrors.huaweicloud.com',
+      'mirrors.tuna.tsinghua.edu.cn',
+    ]);
+  });
 });
 
 const NODE_HTML = [

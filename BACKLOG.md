@@ -5,7 +5,7 @@
 
 ## P0 安全(2026-09-08 安全审查正式发现,置信 8/10 High)
 
-### S1. Node 校验和与包体同源,镜像自洽投毒可绕过 §3.5 红线 → PATH 持久化 RCE
+### S1. Node 校验和与包体同源,镜像自洽投毒可绕过 §3.5 红线 → PATH 持久化 RCE ✅ 已修(2026-09-09,必做+选配2 都做)
 - **位置**:`catalog/node.json:32-36`(`checksum.urls` 顺序:huawei→tuna→nodejs.org)+ `src/main/core/install.ts:43-57`(`resolveExpectedChecksum` 对 URL 列表 first-success-wins)
 - **根因**:下载源序与校验源序相同,默认华为云既供 zip 又供 `SHASUMS256.txt`;单镜像沦陷即可自证清白。maven(哈希强制取 Apache 官方域)与 jdk(API 响应携带哈希)都做了域分离,node 是唯一漏点。`jdk.json` 的 `sidecarUrl` 字段无代码消费(死配置),与本漏洞无关。
 - **修法(一行起)**:

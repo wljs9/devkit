@@ -11,7 +11,7 @@ import { CatalogEntrySchema, type CatalogEntry, type DiscoveredVersion } from '.
 import { Downloader } from '../src/main/core/download';
 import { HistoryLog } from '../src/main/core/history';
 import { removeJunction } from '../src/main/core/junction';
-import { ensureDevRoot, install, setCurrent, uninstall } from '../src/main/core/install';
+import { ensureDevRoot, install, orderChecksumUrls, setCurrent, uninstall } from '../src/main/core/install';
 import { currentLinkPath, toolVersionDir } from '../src/main/core/paths';
 import { JsonRepository } from '../src/main/core/store';
 import { makeZip } from './helpers/mkzip';
@@ -238,5 +238,64 @@ describe('安装全链路:下载→校验→解压→建链→读回(§11)', () 
     await expect(uninstall(entry, V1, ctx(entry))).rejects.toThrowError(/是链接而非真实目录|拒绝/);
     expect(fs.existsSync(path.join(`${real}-moved`, 'marker.txt'))).toBe(true); // 数据毫发无损
     expect(store.load().installs).toHaveLength(1); // 未登记删除
+  });
+});
+
+/** S1(2026-09-09 安全审查):校验源与下载源跨域优先,同主机投毒不能自证清白 */
+describe('S1 校验和跨域背书', () => {
+  it('orderChecksumUrls:同主机的 sidecar 沉底,组内保序;坏/相对 URL 按跨域处理', () => {
+    const urls = ['http://a.invalid/x1', 'http://b.invalid/y', 'http://a.invalid/x2', 'relative/sums.txt'];
+    expect(orderChecksumUrls(urls, 'http://a.invalid/pkg.zip')).toEqual([
+      'http://b.invalid/y',
+      'relative/sums.txt',
+      'http://a.invalid/x1',
+      'http://a.invalid/x2',
+    ]);
+  });
+
+  function s1Entry(base: string, urls: string[]): CatalogEntry {
+    const r = CatalogEntrySchema.safeParse({
+      id: PKG, displayName: 'fx', listKind: 'dirIndex',
+      dirRegex: '^node-(?<ver>\\d+\\.\\d+\\.\\d+)/$', fileRegex: '^pkg-\\d.*\\.zip$',
+      sources: [{ id: 'local', listUrl: `${base}/`, fileUrl: `${base}/pkg-{ver}.zip` }],
+      checksum: { kind: 'shasumsFile', algo: 'sha256', urls, lineMatch: '  pkg-{ver}.zip$' },
+      rootDir: `${PKG}-{ver}`, layout: 'binAtRoot',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('下载源与首个校验源同主机:同主机的坏哈希被跳过,跨域命中真值(S2 式投毒失败)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`); // 真下载源
+    servers.push(srv);
+    const good = createHash('sha256').update(buf).digest('hex');
+    const bad = createHash('sha256').update(Buffer.from('trojan')).digest('hex');
+    const entry = s1Entry(srv.url, [`${srv.url}/SHASUMS256.txt`, 'http://cross.invalid/SHASUMS256.txt']);
+    const fetched: string[] = [];
+    const fetchText = async (u: string): Promise<string> => {
+      fetched.push(u);
+      const line = (u.includes('cross.invalid') ? good : bad) + `  pkg-${V1}.zip`;
+      return line;
+    };
+    const rec = await install(entry, verOf(V1), {}, { devRoot, downloader: dl, store, history, fetchText });
+    expect(rec.sha256).toBe(good);
+    // 同主机源排在跨域之后(catalog 首位若被沦陷镜像占着,这里也不会先信它)
+    expect(fetched).toEqual(['http://cross.invalid/SHASUMS256.txt']);
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+  });
+
+  it('跨域全部取不到 → 仍回落同主机兜底(可用性优先,单源自洽仍被拒绝)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const good = createHash('sha256').update(buf).digest('hex');
+    const entry = s1Entry(srv.url, [`${srv.url}/SHASUMS256.txt`, 'http://cross.invalid/SHASUMS256.txt']);
+    const fetchText = async (u: string): Promise<string> => {
+      if (u.includes('cross.invalid')) throw new Error('cross down'); // 跨域不可达
+      return good + `  pkg-${V1}.zip`; // 同主机兜底命中
+    };
+    const rec = await install(entry, verOf(V1), {}, { devRoot, downloader: dl, store, history, fetchText });
+    expect(rec.sha256).toBe(good);
   });
 });

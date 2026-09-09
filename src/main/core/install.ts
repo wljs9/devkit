@@ -24,12 +24,34 @@ export interface InstallContext {
   fetchText?: (url: string) => Promise<string>;
 }
 
+function hostOf(u: string): string {
+  try {
+    return new URL(u).hostname.toLowerCase();
+  } catch {
+    return ''; // 相对/坏 URL:无法判主机 → 不参与域分离排序的"同主机组"
+  }
+}
+
+/**
+ * ★ S1(2026-09-09 安全审查):校验源与下载源跨域优先 —— 与包体不同 host 的 sidecar 排前,
+ * 同 host 的降为兜底(组内保持 catalog 原序)。单镜像沦陷时"zip+SHASUMS 自洽投毒"不再免费:
+ * 除非所有跨域源都取不到,才会退回同源背书(catalog 侧仍把官方域放首位,双保险)。
+ */
+export function orderChecksumUrls(urls: string[], downloadUrl: string): string[] {
+  const dlHost = hostOf(downloadUrl);
+  const cross: string[] = [];
+  const same: string[] = [];
+  for (const u of urls) (dlHost && hostOf(u) === dlHost ? same : cross).push(u);
+  return [...cross, ...same];
+}
+
 /** 取回期望哈希(shasumsFile/officialSidecar 走网络;adoptiumApi 随发现结果携带) */
 async function resolveExpectedChecksum(
   entry: CatalogEntry,
   ver: DiscoveredVersion,
   ctx: InstallContext,
   sourceId: string,
+  downloadUrl: string,
 ): Promise<{ algo: HashAlgo; hex: string } | undefined> {
   const c = entry.checksum;
   if (c.kind === 'adoptiumApi') {
@@ -38,7 +60,7 @@ async function resolveExpectedChecksum(
   }
   const fetchText = ctx.fetchText ?? defaultFetchText;
   const vars = varsOf(entry, ver, sourceId);
-  const urls = (c.urls ?? []).map((u) => renderTemplate(u, vars));
+  const urls = orderChecksumUrls((c.urls ?? []).map((u) => renderTemplate(u, vars)), downloadUrl);
   const lineRe = c.lineMatch ? buildShasumsLineRe(c.lineMatch, String(vars.ver), c.algo) : null;
   for (const url of urls) {
     let txt: string;
@@ -102,7 +124,7 @@ export async function install(
   let tempDir: string | null = null;
   try {
     // ① 下载 + 哈希校验(§7.4,校验失败清 part 并拒绝——§3.5 红线)
-    const expected = await resolveExpectedChecksum(entry, ver, ctx, src.id);
+    const expected = await resolveExpectedChecksum(entry, ver, ctx, src.id, url);
     const fileName = url.slice(url.lastIndexOf('/') + 1);
     const out = await ctx.downloader.start({ id: `${entry.id}-${ver.version}`, url, fileName, expected }, opts.onProgress);
 

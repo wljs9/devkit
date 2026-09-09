@@ -30,12 +30,12 @@
     "kind": "shasumsFile",
     "algo": "sha256",
     "urls": [
+      "https://nodejs.org/dist/v{ver}/SHASUMS256.txt",
       "https://mirrors.huaweicloud.com/nodejs/v{ver}/SHASUMS256.txt",
-      "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v{ver}/SHASUMS256.txt",
-      "https://nodejs.org/dist/v{ver}/SHASUMS256.txt"
+      "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v{ver}/SHASUMS256.txt"
     ],
     "lineMatch": "  node-v{ver}-win-x64.zip$",
-    "note": "各源同目录 SHASUMS256.txt(产品文档 v1.1 的 SHASUMS256.txt.txt 系笔误,实测文件名无重复后缀)"
+    "note": "S1 安全修复(2026-09-09):官方 nodejs.org 前置为校验首位(M0 实测境内可直连,见 sources.official.note),镜像 sidecar 降为兜底 —— 下载与校验默认跨域,单镜像沦陷无法自证清白。产品文档 v1.1 的 SHASUMS256.txt.txt 系笔误,实测文件名无重复后缀"
   },
   "rootDir": "node-v{ver}-win-x64",
   "layout": "binAtRoot",

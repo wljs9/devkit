@@ -6,7 +6,7 @@
 - **产品文档:`产品文档.md`(v1.2,§5 镜像规则已按 M0 实测定稿 —— 产品层以此为指导)**
 - **技术手册:`技术手册.md`(v1.4,最终技术栈 Electron+Vue+全栈TS、工程结构、系统层细则、测试门禁 —— 编码以此为准;技术冲突处以技术手册覆盖产品文档)**
 - **README:`README.md`(用户视角简介 + `pnpm dist` 出包 + SmartScreen 说明 + 装/卸语义)—— M4 交付,面向终端用户**
-- **待办清单:`BACKLOG.md`(v1.0.0 后所有待修复项的唯一入口:安全审查 S1-S3 + 用户后续 bug/功能占位 + 修复轮验收模板)——新会话开工先读它**
+- **待办清单:`BACKLOG.md`(新会话唯一入口:S1-S3/R1 已归档〔R1 节=下一版发布配方〕;活待办=P2 用户 bug/功能/改进清单,含标准接单流程与每轮验收模板)——新会话开工先读它**
 - 当前阶段:**MVP 完成 + 安全修复轮完成(2026-09-09:S1/S2/S3 全修,`BACKLOG.md` 各条已打勾;v1.0.1 = GitHub Release 挂安装包,仓库已转 public)。剩余待办 = `BACKLOG.md` P2(用户 bug/功能清单,待补)**。新任务 = 按 P2 逐项修,或用户提出的新功能(新里程碑另立章节)
 - M3 已定决策(用户选 A,2026-09-07):首跑向导**保留固定 3 条 PATH + JAVA_HOME 无条件写入**(§6 不变);由此产生的"装了 Maven 没装 JDK → JAVA_HOME 悬空 → mvn 报错"不靠少写条目规避,而**由 M3 环境页体检逐条标 `✓正常/⚠失效`** 来暴露(见 §4.4)。core 弹药已就位:M1 `paths.auditPathEntries`(失效项+重复项)、M2 `env:state`(固定条目 present ✓/✗),M3 主要是接成页面 + 清理/回滚 UI,勿重写这两个原语
 - Electron 二进制:本机 GitHub 不可直连 → `pnpm install` 官方 install.js 解 ~130MB 包会静默卡住(技术手册 §7.6);补二进制用 **`pnpm bin:electron`**(已固化镜像下载 + Expand-Archive 解压),或先 `export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
@@ -17,7 +17,7 @@
 
 1. 阅读顺序:本文件 → `BACKLOG.md`(待修项唯一入口)→ `技术手册.md`(编码为准)→ `产品文档.md`(功能为准);需要背景/理由再翻 `需求分析.md`;
 2. 当前动作:**S1/S2/S3 安全修复轮已完成(2026-09-09,逐 commit:fix(security) S1/S2/S3;测试基线 100→111 只增不减,typecheck/test 全绿;R1 发布动作见 BACKLOG 该节状态)**。下一批待办 = 用户的 bug/功能清单到手后追加为 P2 编号项再逐项修。流程规范不变:每收到一项先复述范围 → 改前 commit 存档 → 实现+补测试(§11 门禁)→ `pnpm test`/`pnpm typecheck` 绿 → 若动打包链再跑 `pnpm dist` → 小结等确认;安全类改动可复跑 `/security-review`。里程碑产物现状:`release/devkit-setup-0.1.1.exe`(安全修复版,`pnpm dist` 随时重出);五页 UI + 首跑向导 + NSIS 安装器全可用;`src/main/core/` 十模块 + arch.test 铁律守卫不变。**开工先跑** `pnpm bin:electron`(若 electron.exe 缺失)→ `pnpm dev`。
-3. 仓库事实:**远端 = `https://github.com/wljs9/devkit`(2026-09-09 经用户指示转 public;"开发工具管理器"名因 GitHub slug 不支持中文留在 description;正式版尚未定,发布走 Release v1.0.1 非正式标记)**。git 身份已改真实账号 `wljs9 <231853886+wljs9@users.noreply.github.com>`(v1.0.0 前历史仍是占位符,未改写);GitHub 连通性**取决于用户加速器开关**(2026-09-08 实测):加速器**关**→ github.com 直连可达(git 不设代理,现状即此);加速器**开**→ 直连断、须走 `http://127.0.0.1:65532`(`git -c http.proxy=... push` 临时用,勿常驻配置)。push 报网络错时按此互换排查;PAT 存 Windows 凭据管理器,有效至 ~2026-11-07(详见 AI 记忆 `github-push-wljs9`)。**同步约定:每轮改动经用户验收后 `git push origin main --follow-tags`**(用户要求"后续改动一并同步")。工程根=仓库根(§2);electron-vite 自 M2 起**合入根目录**(main/preload/renderer 三入口 + `out/` 产物;`pnpm dev/build/typecheck/test` 就绪),M3 沿用同一套配置未再起工程;tsconfig 三段式与 vitest projects(core/node + renderer/happy-dom)见技术手册 §7.6;运行时依赖新增 **undici**(全局 dispatcher 接代理,§7.6);M3 起侧边栏五页全部实装(`Placeholder.vue` 已删),新增通道 `cache:clear`;
+3. 仓库事实:**远端 = `https://github.com/wljs9/devkit`(2026-09-09 经用户指示转 public;"开发工具管理器"名因 GitHub slug 不支持中文留在 description;正式版尚未定,发布走 Release v1.0.1 非正式标记)**。git 身份已改真实账号 `wljs9 <231853886+wljs9@users.noreply.github.com>`(v1.0.0 前历史仍是占位符,未改写);GitHub 连通性**取决于用户加速器开关**(2026-09-08 实测):加速器**关**→ github.com 直连可达(git 不设代理,现状即此);加速器**开**→ 直连断、须走 `http://127.0.0.1:65532`(`git -c http.proxy=... push` 临时用,勿常驻配置)。push 报网络错时按此互换排查;PAT 存 Windows 凭据管理器,有效至 ~2026-11-07(详见 AI 记忆 `github-push-wljs9`)。**同步约定:每轮改动经用户验收后 `git push origin main && git push origin --tags`**(用户要求"后续改动一并同步";2026-09-09 实测坑:`--follow-tags` 推不到本仓库的轻量 tag)。工程根=仓库根(§2);electron-vite 自 M2 起**合入根目录**(main/preload/renderer 三入口 + `out/` 产物;`pnpm dev/build/typecheck/test` 就绪),M3 沿用同一套配置未再起工程;tsconfig 三段式与 vitest projects(core/node + renderer/happy-dom)见技术手册 §7.6;运行时依赖新增 **undici**(全局 dispatcher 接代理,§7.6);M3 起侧边栏五页全部实装(`Placeholder.vue` 已删),新增通道 `cache:clear`;
 4. 遵守下方强制执行规范。
 
 

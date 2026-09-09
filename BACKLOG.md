@@ -27,6 +27,17 @@
 - **修法**:`EnvService` 加 `isBackupFile(file)`:`path.resolve(file)` 必须落在 `this.backupDir` 下且 basename 匹配 `writeBackup` 命名(`env.ts:245`,形如 `2026-09-08T06-31-12-345.json`);`restoreBackup` 入口拒绝并抛 `CoreError('env-backup-path', …)`。
 - **测试**:`tests/env.test.ts` 补两例——目录外路径拒绝、伪造名拒绝、真备份照常成功。
 
+## P0.5 发布动作(2026-09-08 与用户口头定序,做 S1 时一并执行)
+
+### R1. 修复轮收尾后发 GitHub pre-release + 安装包附件
+- **顺序**:S1(必须)→ [S3 顺手] → `pnpm dist` 重出包 → 用户确认 → **发 Release**(否则 81MB 传两遍)。
+- **版本**:发布前把 `package.json` 的 `version` 从 `0.1.0` bump 到 `0.1.1`(§10 单一来源;产物名自动变 `devkit-setup-0.1.1.exe`),commit 随修复轮一起;tag `v1.0.1` 打在 bump 提交上(MVP 系列延续 v1.0.x)。
+- **做法**(凭据/API 细节见 AI 记忆 `github-push-wljs9` 与 CLAUDE.md 仓库事实):
+  1. `curl -X POST https://api.github.com/repos/wljs9/devkit/releases -H "Authorization: Bearer <PAT>" -d '{"tag_name":"v1.0.1","name":"DevKit MVP v1.0.1(非正式版)","prerelease":true,"body":"…修复摘要,见 BACKLOG S1…"}'`;
+  2. 用上一步返回的 `upload_url` 上传 `release/devkit-setup-0.1.1.exe`(Content-Type: application/octet-stream,81MB 需耐心/断点重传);
+  3. README 的 SHA-256 口径:发布说明里附上 `Get-FileHash` 值,供用户核对。
+- **注意**:仓库是私有库,Release 也私有——安装包只有你可见,安全;若日后转 public,先确认包体哈希与说明无个人信息。
+
 ## P2 用户后续清单(占位)
 > 用户已明示"bug 修改和功能添加后续再来"。收到清单后:复述范围 → 追加到本节并编号 → 逐项修,勿自动扩权。
 

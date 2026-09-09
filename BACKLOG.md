@@ -36,7 +36,8 @@
   1. `curl -X POST https://api.github.com/repos/wljs9/devkit/releases -H "Authorization: Bearer <PAT>" -d '{"tag_name":"v1.0.1","name":"DevKit MVP v1.0.1(非正式版)","prerelease":true,"body":"…修复摘要,见 BACKLOG S1…"}'`;
   2. 用上一步返回的 `upload_url` 上传 `release/devkit-setup-0.1.1.exe`(Content-Type: application/octet-stream,81MB 需耐心/断点重传);
   3. README 的 SHA-256 口径:发布说明里附上 `Get-FileHash` 值,供用户核对。
-- **注意**:仓库是私有库,Release 也私有——安装包只有你可见,安全;若日后转 public,先确认包体哈希与说明无个人信息。
+- **注意**:~~仓库是私有库,Release 也私有~~ **已执行(2026-09-09)**:用户指示"私人仓库等于没发布",经全历史敏感信息扫描(无 token/私钥/个人信息,PAT 仅存 Windows 凭据管理器)后转 public,Release 随之公开。
+- **状态**:✅ 完成(2026-09-09,v1.0.1 pre-release + 安装包附件,细节见本节做法与 git tag)。
 
 ## P2 用户后续清单(占位)
 > 用户已明示"bug 修改和功能添加后续再来"。收到清单后:复述范围 → 追加到本节并编号 → 逐项修,勿自动扩权。
@@ -54,4 +55,4 @@ pnpm test             # 全绿(当前基线 100 例,新测试只增不减)
 pnpm dist             # 动了 catalog/打包链/主进程时:四段全绿,release/ 出新包
 ```
 每轮 commit 信息注明修复项编号(S1/S2/S3/B#),安全项修复后建议再跑一遍 `/security-review`。
-经用户验收后同步远端:`git push origin main --follow-tags`(远端 wljs9/devkit 私有;凭据在 Windows 凭据管理器,PAT 约 2026-11-07 过期;网络取决于加速器开关,见 CLAUDE.md 仓库事实)。
+经用户验收后同步远端:`git push origin main --follow-tags`(远端 wljs9/devkit **public,2026-09-09 起**;凭据在 Windows 凭据管理器,PAT 约 2026-11-07 过期;网络取决于加速器开关,见 CLAUDE.md 仓库事实)。

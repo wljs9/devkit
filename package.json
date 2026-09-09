@@ -1,6 +1,6 @@
 {
   "name": "devkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Windows 开发环境管理器:国内镜像下载 + 可携化安装 + 干净环境变量",
   "author": "DevKit",

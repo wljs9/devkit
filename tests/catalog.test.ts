@@ -37,6 +37,29 @@ describe('catalog/ 定稿文件(§6)', () => {
       'mirrors.tuna.tsinghua.edu.cn',
     ]);
   });
+  it('★ F1 定稿门禁:三份清单都声明了 adopt(接管已有安装),且探测链非空、标记非空', () => {
+    const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
+    for (const e of loadCatalogDir(dir)) {
+      expect(e.adopt, `${e.id} 缺 adopt 段(添加已有安装会不可用)`).toBeDefined();
+      expect(e.adopt!.markers.length, `${e.id} 的 markers 为空`).toBeGreaterThan(0);
+      expect(e.adopt!.version.length, `${e.id} 的 version 探测链为空`).toBeGreaterThan(0);
+    }
+    // 各工具的"身份标记"必须能对上真实发行版布局(jdk=bin\java.exe / node=node.exe / maven=bin\mvn.cmd)
+    const byId = new Map(loadCatalogDir(dir).map((e) => [e.id, e]));
+    expect(byId.get('jdk')!.adopt!.markers).toContain('bin\\java.exe');
+    expect(byId.get('node')!.adopt!.markers).toContain('node.exe');
+    expect(byId.get('maven')!.adopt!.markers).toContain('bin\\mvn.cmd');
+    // 每种探测型都至少被用上一次(releaseFile/fileGlob/dirName/exec 四型都得有消费者)
+    const kinds = new Set(loadCatalogDir(dir).flatMap((e) => e.adopt!.version.map((v) => v.kind)));
+    expect([...kinds].sort()).toEqual(['dirName', 'exec', 'fileGlob', 'releaseFile']);
+  });
+  it('★ F1:schema 对 adopt 段的守门(未知探测型/空链 → 拒)', () => {
+    expect(CatalogEntrySchema.safeParse({ ...nodeCatalog(), adopt: { markers: ['node.exe'], version: [{ kind: 'nope', regex: 'x' }] } }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...nodeCatalog(), adopt: { markers: [], version: [{ kind: 'dirName', regex: 'x' }] } }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...nodeCatalog(), adopt: { markers: ['node.exe'], version: [] } }).success).toBe(false);
+    // 正路:合法 adopt 段被接受
+    expect(CatalogEntrySchema.safeParse({ ...nodeCatalog(), adopt: { markers: ['node.exe'], version: [{ kind: 'dirName', regex: 'node-v([0-9.]+)' }] } }).success).toBe(true);
+  });
 });
 
 const NODE_HTML = [

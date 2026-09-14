@@ -21,6 +21,12 @@ export interface InstallRecord {
   /** ISO 字符串(§12:时间一律 ISO) */
   installedAt: string;
   isCurrent: boolean;
+  /**
+   * ★ F1(2026-09-14):来源 —— 'download' = 本工具下载安装(tools\ 内,可卸载删除);
+   * 'adopt' = 接管的本机既有安装(路径在 DevRoot 之外,【绝不删文件】,只能「移出登记」)。
+   * 缺省(老记录)按 'download' 处理。
+   */
+  origin?: 'download' | 'adopt';
 }
 
 export interface CatalogCacheEntry {

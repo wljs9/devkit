@@ -45,6 +45,17 @@
   },
   "rootDir": "{releaseName}",
   "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\java.exe"],
+    "exec": "bin\\java.exe",
+    "binDir": "bin",
+    "version": [
+      { "kind": "releaseFile", "file": "release", "regex": "JAVA_VERSION=\"([^\"]+)\"", "note": "JDK 自带 release 文件,权威且零执行风险(形如 JAVA_VERSION=\"21.0.4\")" },
+      { "kind": "exec", "exe": "bin\\java.exe", "args": ["-version"], "regex": "version \"([^\"]+)\"", "note": "java -version 打到 stderr(本探测已合并 stdout+stderr)" },
+      { "kind": "dirName", "regex": "jdk-?(\\d+(?:\\.\\d+)*)", "note": "目录名兜底(jdk-21.0.4 / jdk-21)" }
+    ],
+    "note": "★ F1 接管既有 JDK(如 C:\\Program Files\\Java\\jdk-21、Green/便携版):current\\jdk 直链其根目录,与 TEMURIN 下载版的 binSubdir 布局一致"
+  },
   "pathPlaceholderNote": "{asset} 来自 API 包名或 USTC 目录页;{major} 为 LTS 大版本;{releaseName}=jdk-X.Y.Z+N(即 zip 内顶层目录)",
   "m0": {
     "verifiedAt": "2026-09-07",

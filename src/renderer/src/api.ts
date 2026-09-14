@@ -42,6 +42,8 @@ export const api$ = {
   installList: () => unwrap(api().installList()),
   installSwitch: (tool: string, version: string) => unwrap(api().installSwitch({ tool, version })),
   installUninstall: (tool: string, version: string) => unwrap(api().installUninstall({ tool, version })),
+  installAdopt: (tool: string, dir: string) => unwrap(api().installAdopt({ tool, dir })),
+  installForget: (tool: string, version: string) => unwrap(api().installForget({ tool, version })),
   envState: () => unwrap(api().envState()),
   envAudit: () => unwrap(api().envAudit()),
   envPrune: (entries: string[]) => unwrap(api().envPrune({ entries })),
@@ -56,4 +58,6 @@ export const api$ = {
   setupRun: (devRoot: string) => unwrap(api().setupRun({ devRoot })),
   /** S2 收口:传 installs 记录 id(见 shared/ipc DevkitApi.openPath) */
   openPath: (installId: string) => unwrap(api().openPath(installId)),
+  /** ★ F1:系统目录选择框(取消 → null) */
+  pickDirectory: () => unwrap(api().pickDirectory()),
 };

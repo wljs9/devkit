@@ -9,11 +9,17 @@ import type { InstallRecord } from '../src/main/core/store';
 
 // 以 (keyof T)[] 标注:字段名漂移/笔误会在【编译期】报错 —— 这才是"防契约漂移"的门禁本意。
 const RECORD_FIELDS: (keyof InstallRecord)[] = [
-  'id', 'tool', 'version', 'path', 'sourceId', 'sourceUrl', 'sha256', 'size', 'installedAt', 'isCurrent',
+  'id', 'tool', 'version', 'path', 'sourceId', 'sourceUrl', 'sha256', 'size', 'installedAt', 'isCurrent', 'origin',
 ];
 const VIEW_FIELDS: (keyof InstallView)[] = [
-  'id', 'tool', 'version', 'path', 'sourceId', 'sourceUrl', 'size', 'installedAt', 'isCurrent',
+  'id', 'tool', 'version', 'path', 'sourceId', 'sourceUrl', 'size', 'installedAt', 'isCurrent', 'origin',
 ];
+
+/** 线上 InstallView 夹具(F1 起带 origin;多处复用避免遗漏) */
+const INSTALL_VIEW: InstallView = {
+  id: 'node-22.20.0', tool: 'node', version: '22.20.0', path: 'p', sourceId: 'huawei', sourceUrl: 'u',
+  size: 1, installedAt: 't', isCurrent: true, origin: 'download',
+};
 
 describe('§8 通道全集', () => {
   it('§8 点名的通道全部在册', () => {
@@ -36,6 +42,24 @@ describe('§8 通道全集', () => {
     for (const c of ['setup:preview', 'setup:defaults', 'setup:check', 'shell:open-path', 'cache:clear']) {
       expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
     }
+  });
+
+  it('★ F1 新增通道(接管/移出登记/目录选择)全部在册', () => {
+    for (const c of ['install:adopt', 'install:forget', 'dialog:pick-dir']) {
+      expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
+    }
+  });
+
+  it('★ F1 契约签名:installAdopt(tool,dir) / installForget(tool,version) 单参 DTO(编译期守卫)', () => {
+    const adopt: DevkitApi['installAdopt'] = (req) =>
+      Promise.resolve({ ok: true as const, data: { ...INSTALL_VIEW, id: req.tool, tool: req.tool, path: req.dir, origin: 'adopt' } });
+    const forget: DevkitApi['installForget'] = (req) => Promise.resolve({ ok: true as const, data: null });
+    expect(adopt.length).toBe(1);
+    expect(forget.length).toBe(1);
+    return Promise.all([
+      adopt({ tool: 'jdk', dir: 'C:\\Program Files\\Java\\jdk-21' }).then((r) => expect(r.ok && r.data.origin).toBe('adopt')),
+      forget({ tool: 'jdk', version: '21.0.4' }).then((r) => expect(r).toEqual({ ok: true, data: null })),
+    ]).then(() => undefined);
   });
 
   it('M3 体检/清理 DTO 可 JSON 往返(§8 判别联合前提)', () => {
@@ -69,7 +93,7 @@ describe('§8 通道全集', () => {
 
 describe('Result 判别联合可 JSON 往返(IPC 结构化克隆前置条件)', () => {
   it('成功与失败两支都能无损序列化', () => {
-    const ok = { ok: true as const, data: [{ id: 'n', tool: 'node', version: '22.0.0', path: 'p', sourceId: 'huawei', sourceUrl: 'u', size: 1, installedAt: 't', isCurrent: true } satisfies InstallView] };
+    const ok = { ok: true as const, data: [{ ...INSTALL_VIEW } satisfies InstallView] };
     const fail = { ok: false as const, code: 'no-devroot', message: '请先完成首跑向导' };
     for (const r of [ok, fail]) {
       const back = JSON.parse(JSON.stringify(r)) as typeof r;

@@ -3,17 +3,18 @@
  * 本层只做三件事:①通道 ⇔ core 调用装配;②core 结果 → 线上 DTO;③异常 → Result 判别联合。
  * §8 铁律:异常不许跨进程裸抛,故每个 handler 经 wrap() 兜底。
  */
-import { app, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import { existsSync } from 'node:fs';
 import {
   Channel, PushChannel,
   type Result, type SettingsView, type DownloadProgressEvent, type DownloadTaskStatus,
-  type EnvAuditView, type EnvStateView, type ManagedEntryView,
+  type EnvAuditView, type EnvStateView, type InstallView, type ManagedEntryView,
 } from '../shared/ipc';
 import type { EnvVar } from './core/env';
+import type { InstallRecord } from './core/store';
 import { CoreError, isCoreError } from './core/errors';
 import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
-import { install, setCurrent, uninstall, ensureDevRoot, resolveOpenableInstallDir, type InstallContext } from './core/install';
+import { adoptInstall, forgetInstall, install, setCurrent, uninstall, ensureDevRoot, resolveOpenableInstallDir, type InstallContext } from './core/install';
 import { cacheStats, clearDownloadCache, DownloadError } from './core/download';
 import { classifyPathEntries, envPlan, checkDevRoot, expandPathVars, splitPathList, pathEntryEquals, mergePathEntries } from './core/paths';
 import { initServices, suggestDevRoot, versionsOf, type Services } from './services';
@@ -129,10 +130,7 @@ export function registerIpc(): void {
   ipcMain.handle(Channel.InstallList, () =>
     wrap(() => {
       if (!s.getDevRoot()) return [];
-      return s.store.load().installs.map((i) => ({
-        id: i.id, tool: i.tool, version: i.version, path: i.path, sourceId: i.sourceId,
-        sourceUrl: i.sourceUrl, size: i.size, installedAt: i.installedAt, isCurrent: i.isCurrent,
-      }));
+      return s.store.load().installs.map(installView);
     }),
   );
 
@@ -147,6 +145,31 @@ export function registerIpc(): void {
     wrap(async () => {
       await uninstall(entryOf(req.tool), req.version, ctx());
       return null;
+    }),
+  );
+
+  // —— ★ F1 接管已有安装:core 只登记 + 建 current 链,不动被接管目录里的任何文件
+  ipcMain.handle(Channel.InstallAdopt, (_e, req: { tool: string; dir: string }) =>
+    wrap(async () => {
+      requireDevRoot(s); // 未选 DevRoot 时先拦下(接管要建 current 链)
+      // 记账在 core 内完成(成功/失败都记,§9),此处不重复 append
+      return installView(await adoptInstall(entryOf(req.tool), req.dir, ctx()));
+    }),
+  );
+
+  // —— ★ F1 移出登记(接管项专用):绝不删文件;下载装的走 install:uninstall
+  ipcMain.handle(Channel.InstallForget, (_e, req: { tool: string; version: string }) =>
+    wrap(async () => {
+      await forgetInstall(entryOf(req.tool), req.version, ctx());
+      return null;
+    }),
+  );
+
+  // —— ★ F1 系统目录选择框:渲染层不持 fs,选目录交给主进程原生对话框
+  ipcMain.handle(Channel.DialogPickDir, () =>
+    wrap(async () => {
+      const r = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择已有的工具安装目录' });
+      return { path: r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]! };
     }),
   );
 
@@ -288,6 +311,15 @@ export function registerIpc(): void {
 }
 
 // ---------------------------------------------------------------- 共享小工具
+
+/** 登记记录 → 线上 DTO(install:list 与 F1 的 install:adopt 共用;origin 缺省按 'download') */
+function installView(i: InstallRecord): InstallView {
+  return {
+    id: i.id, tool: i.tool, version: i.version, path: i.path, sourceId: i.sourceId,
+    sourceUrl: i.sourceUrl, size: i.size, installedAt: i.installedAt, isCurrent: i.isCurrent,
+    origin: i.origin ?? 'download',
+  };
+}
 
 function requireDevRoot(s: Services): string {
   const d = s.getDevRoot();

@@ -19,6 +19,8 @@ const api: DevkitApi = {
   installList: () => ipcRenderer.invoke(Channel.InstallList),
   installSwitch: (req) => ipcRenderer.invoke(Channel.InstallSwitch, req),
   installUninstall: (req) => ipcRenderer.invoke(Channel.InstallUninstall, req),
+  installAdopt: (req) => ipcRenderer.invoke(Channel.InstallAdopt, req),
+  installForget: (req) => ipcRenderer.invoke(Channel.InstallForget, req),
 
   envState: () => ipcRenderer.invoke(Channel.EnvState),
   envAudit: () => ipcRenderer.invoke(Channel.EnvAudit),
@@ -36,6 +38,7 @@ const api: DevkitApi = {
   setupCheck: (req) => ipcRenderer.invoke(Channel.SetupCheck, req),
   openPath: (installId) => ipcRenderer.invoke(Channel.ShellOpenPath, installId), // S2:只透传 installId
   setupDefaults: () => ipcRenderer.invoke(Channel.SetupDefaults),
+  pickDirectory: () => ipcRenderer.invoke(Channel.DialogPickDir),
 };
 
 contextBridge.exposeInMainWorld('devkit', api);

@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CoreError } from './errors';
 
-export type HistoryKind = 'install' | 'uninstall' | 'switch' | 'env_write' | 'env_restore' | 'download';
+export type HistoryKind = 'install' | 'uninstall' | 'switch' | 'env_write' | 'env_restore' | 'download' | 'adopt' | 'forget';
 
 export interface HistoryEntry {
   ts: string;
@@ -18,7 +18,7 @@ export interface HistoryEntry {
   backupFile?: string;
 }
 
-const KINDS: ReadonlySet<string> = new Set(['install', 'uninstall', 'switch', 'env_write', 'env_restore', 'download']);
+const KINDS: ReadonlySet<string> = new Set(['install', 'uninstall', 'switch', 'env_write', 'env_restore', 'download', 'adopt', 'forget']);
 
 export class HistoryLog {
   constructor(readonly file: string) {}

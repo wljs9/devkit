@@ -37,6 +37,17 @@
   },
   "rootDir": "apache-maven-{ver}",
   "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\mvn.cmd"],
+    "exec": "bin\\mvn.cmd",
+    "binDir": "bin",
+    "version": [
+      { "kind": "fileGlob", "dir": "lib", "pattern": "^maven-core-(\\d+\\.\\d+\\.\\d+)\\.jar$", "note": "lib\\maven-core-<ver>.jar 的版本即发行版版本,零执行风险" },
+      { "kind": "dirName", "regex": "^apache-maven-(\\d+\\.\\d+\\.\\d+)", "note": "目录名兜底" },
+      { "kind": "exec", "exe": "bin\\mvn.cmd", "args": ["-v"], "regex": "Apache Maven (\\d+\\.\\d+\\.\\d+)", "note": "最后兜底:mvn.cmd 经 cmd.exe /c 执行" }
+    ],
+    "note": "★ F1 接管既有 Maven(如 C:\\apache-maven-3.9.9 或 IDE 自带分发)"
+  },
   "m0": {
     "verifiedAt": "2026-09-07",
     "sample": "3.9.16",

@@ -18,12 +18,15 @@ const KIND_OPTIONS = [
   { label: '安装', value: 'install' },
   { label: '切换', value: 'switch' },
   { label: '卸载', value: 'uninstall' },
+  { label: '接管', value: 'adopt' },
+  { label: '移出登记', value: 'forget' },
   { label: '环境变更', value: 'env_write' },
   { label: '环境恢复', value: 'env_restore' },
   { label: '下载', value: 'download' },
 ];
 const KIND_LABEL: Record<string, string> = {
   install: '安装', switch: '切换版本', uninstall: '卸载', env_write: '环境变更', env_restore: '环境恢复', download: '下载',
+  adopt: '接管已有安装', forget: '移出登记',
 };
 
 async function load(): Promise<void> {
@@ -50,7 +53,12 @@ function summary(h: HistoryViewEntry): string {
     case 'switch':
       return [str('tool'), str('version')].filter(Boolean).join(' → ');
     case 'uninstall':
+    case 'forget':
       return [str('tool'), str('version')].filter(Boolean).join(' ');
+    case 'adopt': {
+      const t = [str('tool'), str('version')].filter(Boolean).join(' ');
+      return t ? `${t} ← ${str('dir') ?? '本机目录'}` : '接管已有安装';
+    }
     case 'env_write': {
       if (str('via') === 'prune') return `清理 ${arr('removed')?.length ?? '?'} 条失效项`;
       const changed = arr('changed');

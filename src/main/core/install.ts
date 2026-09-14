@@ -4,9 +4,11 @@
  *       登记(installs)→ 该工具首个版本自动建链 current → history 记账。
  * 失败清理临时目录,登记表不写入(§7.5)。
  */
+import { execFile as cpExecFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
 import extractZip from 'extract-zip';
 import { CoreError } from './errors';
 import { Downloader, type DownloadProgress, type HashAlgo } from './download';
@@ -187,6 +189,175 @@ export async function install(
   }
 }
 
+// ---------------------------------------------------------------- ★ F1 接管已有安装(adopt,2026-09-14)
+
+/** 探测用执行器(注入点:测试无需真跑 exe) */
+export type AdoptRunFn = (exe: string, args: string[]) => Promise<string>;
+
+export interface AdoptDeps {
+  run?: AdoptRunFn;
+}
+
+export interface AdoptHit {
+  /** 归一化版本串(去首尾空白 + 去前导 v/V) */
+  version: string;
+  /** 命中的探测方式 */
+  via: 'releaseFile' | 'fileGlob' | 'dirName' | 'exec';
+}
+
+/** 执行探测的默认实现:.cmd/.bat 经 cmd.exe /c 转一手(java -version 走 stderr,故合并两流) */
+const defaultAdoptRun: AdoptRunFn = async (exe, args) => {
+  const isScript = /\.(cmd|bat)$/i.test(exe);
+  const cmd = isScript ? 'cmd.exe' : exe;
+  const argv = isScript ? ['/d', '/c', exe, ...args] : args;
+  const r = await promisify(cpExecFile)(cmd, argv, { windowsHide: true, timeout: 5000, maxBuffer: 1024 * 1024 });
+  return `${r.stdout}\n${r.stderr}`;
+};
+
+function insideOf(p: string, root: string): boolean {
+  return path.resolve(p).toLowerCase().startsWith(path.resolve(root).toLowerCase() + path.sep);
+}
+
+/** 取第 1 个捕获组(大小写不敏感 + 多行) */
+function group1(regex: string, text: string): string | null {
+  const m = new RegExp(regex, 'mi').exec(text);
+  return m?.[1] ?? null;
+}
+
+/**
+ * 接管前置校验(纯检查,不写任何东西)。逐条拒绝的理由都要能直接展示给用户:
+ * ①清单未声明 adopt;②空/相对/UNC 路径;③不存在或非目录;④是链接(要真实目录,防链套链);
+ * ⑤落在 DevRoot 内(那是本工具自管区,不该"接管");⑥缺标记文件(选错工具/目录)。
+ */
+export function assertAdoptableDir(entry: CatalogEntry, dir: string, devRoot?: string): void {
+  const a = entry.adopt;
+  if (!a) throw new CoreError('adopt-unsupported', `目录清单未声明 ${entry.id} 的接管规则(adopt),暂不支持添加已有安装`);
+  if (typeof dir !== 'string' || dir.trim().length === 0) throw new CoreError('adopt-bad-path', '目录不能为空');
+  if (!path.isAbsolute(dir)) throw new CoreError('adopt-bad-path', `必须是绝对路径:${dir}`);
+  if (/^\\\\/.test(dir)) throw new CoreError('adopt-unc', `不接受 UNC 网络路径(链接目标必须是本机目录):${dir}`);
+  let st: fs.Stats;
+  try {
+    st = fs.lstatSync(dir);
+  } catch {
+    throw new CoreError('adopt-not-dir', `目录不存在:${dir}`);
+  }
+  if (st.isSymbolicLink()) throw new CoreError('adopt-is-link', `该路径本身是链接/junction,请选择真实目录:${dir}`);
+  if (!st.isDirectory()) throw new CoreError('adopt-not-dir', `不是目录:${dir}`);
+  if (devRoot && insideOf(dir, devRoot)) throw new CoreError('adopt-inside-devroot', `该目录在 DevRoot 内(本工具自管区),无需接管:${dir}`);
+  const missing = a.markers.filter((m) => !fs.existsSync(path.join(dir, m)));
+  if (missing.length > 0) {
+    throw new CoreError('adopt-not-tool', `目录里找不到 ${entry.displayName} 的标记文件(${missing.join('、')})——可能选错了工具或目录:${dir}`);
+  }
+}
+
+async function runProbe(dir: string, p: NonNullable<CatalogEntry['adopt']>['version'][number], deps: AdoptDeps): Promise<string | null> {
+  if (p.kind === 'releaseFile') {
+    let txt: string;
+    try {
+      txt = fs.readFileSync(path.join(dir, p.file), 'utf8');
+    } catch {
+      return null;
+    }
+    return group1(p.regex, txt);
+  }
+  if (p.kind === 'fileGlob') {
+    let names: string[];
+    try {
+      names = fs.readdirSync(path.join(dir, p.dir));
+    } catch {
+      return null;
+    }
+    const re = new RegExp(p.pattern);
+    for (const n of [...names].sort()) {
+      const m = re.exec(n);
+      if (m?.[1]) return m[1];
+    }
+    return null;
+  }
+  if (p.kind === 'dirName') return group1(p.regex, path.basename(path.resolve(dir)));
+  const exe = path.join(dir, p.exe);
+  if (!fs.existsSync(exe)) return null;
+  return group1(p.regex, await (deps.run ?? defaultAdoptRun)(exe, p.args ?? []));
+}
+
+/** 版本探测链:按序首个命中者胜出;全败 → adopt-unknown-version(附每条探测的失败原因) */
+export async function probeAdoptVersion(entry: CatalogEntry, dir: string, deps: AdoptDeps = {}): Promise<AdoptHit> {
+  const chain = entry.adopt?.version ?? [];
+  const tried: string[] = [];
+  for (const p of chain) {
+    try {
+      const hit = await runProbe(dir, p, deps);
+      if (hit !== null) return { version: hit.trim().replace(/^[vV](?=\d)/, ''), via: p.kind };
+      tried.push(`${p.kind}:未命中`);
+    } catch (e) {
+      tried.push(`${p.kind}:${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  throw new CoreError('adopt-unknown-version', `无法从该目录识别 ${entry.displayName} 版本(${tried.join(';')})`, { dir });
+}
+
+/**
+ * 接管登记:校验 → 探测版本 → 查重 → 登记(origin='adopt')→ 该工具首个版本自动建链。
+ * **不复制、不移动、不删除任何文件** —— 只记一条指向既有目录的登记 + 一条 current junction。
+ */
+export async function adoptInstall(entry: CatalogEntry, dir: string, ctx: InstallContext, deps: AdoptDeps = {}): Promise<InstallRecord> {
+  const t0 = Date.now();
+  let target = path.resolve(dir);
+  const done = (ok: boolean, extra: Record<string, unknown>): void => {
+    ctx.history.append({ kind: 'adopt', ok, durationMs: Date.now() - t0, detail: { tool: entry.id, dir: target, ...extra } });
+  };
+  try {
+    assertAdoptableDir(entry, dir, ctx.devRoot);
+    // 落 realpath:junction 层存的就是 realpath(ensureJunction),两边同源「移出登记」才断得干净
+    target = fs.realpathSync(dir);
+    const hit = await probeAdoptVersion(entry, dir, deps);
+    const installs = ctx.store.load().installs;
+    const dupV = installs.find((i) => i.tool === entry.id && i.version === hit.version);
+    if (dupV) throw new CoreError('already-installed', `${entry.id} ${hit.version} 已在登记表中(${dupV.path})`);
+    if (installs.some((i) => i.tool === entry.id && pathEq(i.path, target))) {
+      throw new CoreError('adopt-path-taken', `该目录已登记为 ${entry.id},无需重复添加:${target}`);
+    }
+    const rec: InstallRecord = {
+      id: `${entry.id}-${versionDir(hit.version)}`,
+      tool: entry.id,
+      version: hit.version,
+      path: target,
+      sourceId: 'local', // 非下载:来源即本机目录
+      sourceUrl: target,
+      sha256: '', // 无校验和可言(不删文件,故也不承担校验背书职责)
+      size: 0, // 不递归统计既有安装体积(可能极大),UI 显示 "—"
+      installedAt: new Date().toISOString(),
+      isCurrent: false,
+      origin: 'adopt',
+    };
+    const isFirstForTool = !installs.some((i) => i.tool === entry.id);
+    if (isFirstForTool) rec.isCurrent = true;
+    ctx.store.update((d) => ({ ...d, installs: [...d.installs, rec] }));
+    if (rec.isCurrent) ensureJunction(currentLinkPath(ctx.devRoot, entry.id), target);
+    done(true, { version: hit.version, via: hit.via, autoCurrent: rec.isCurrent });
+    return rec;
+  } catch (e) {
+    done(false, { error: e instanceof Error ? `${e.name}:${e.message}` : String(e) });
+    throw e;
+  }
+}
+
+/**
+ * 移出登记(接管项专用):只删登记行 + 断 current 链,**绝不触目标目录里的任何文件**(§7.3 红线的自然延伸)。
+ * 若移出的恰是当前生效版本:current 链一并断开(环境页按决策 A 标成 ⚠失效),由用户决定后续。
+ */
+export async function forgetInstall(entry: CatalogEntry, version: string, ctx: InstallContext): Promise<void> {
+  const t0 = Date.now();
+  const rec = ctx.store.load().installs.find((i) => i.tool === entry.id && i.version === version);
+  if (!rec) throw new CoreError('not-installed', `${entry.id} ${version} 未登记`);
+  if (rec.origin !== 'adopt') throw new CoreError('not-adopted', `${entry.id} ${version} 是本工具下载安装的,请用「卸载」`);
+  ctx.store.update((d) => ({ ...d, installs: d.installs.filter((i) => !(i.tool === entry.id && i.version === version)) }));
+  const link = currentLinkPath(ctx.devRoot, entry.id);
+  const insp = inspectLink(link);
+  if (insp.isLink && insp.realTarget && pathEq(insp.realTarget, rec.path)) removeJunction(link); // 只断链
+  ctx.history.append({ kind: 'forget', ok: true, durationMs: Date.now() - t0, detail: { tool: entry.id, version, path: rec.path } });
+}
+
 /** 切换当前版本 = 重建一个 junction,PATH 零改动(产品文档 §6) */
 export async function setCurrent(entry: CatalogEntry, version: string, ctx: InstallContext): Promise<void> {
   const t0 = Date.now();
@@ -210,6 +381,10 @@ export async function uninstall(entry: CatalogEntry, version: string, ctx: Insta
   const dir = toolVersionDir(ctx.devRoot, entry.id, version);
   assertDeletableRealDir(dir); // ← 第一道闸:凡链接一律抛 junction-expected,递归删除永不接触链接路径
   const rec = ctx.store.load().installs.find((i) => i.tool === entry.id && i.version === version);
+  // ★ F1:接管项（origin='adopt'）的目录不归本工具所有 → 一律不给删除入口,只许「移出登记」
+  if (rec?.origin === 'adopt') {
+    throw new CoreError('adopt-unregister-only', `该版本是接管的既有安装,不删除文件,请用「移出登记」:${rec.path}`);
+  }
   if (rec?.isCurrent) throw new CoreError('uninstall-current', `不能卸载当前生效版本(${entry.id} ${version}),请先切换到其他版本`);
   if (rec && path.normalize(rec.path).toLowerCase() !== path.normalize(dir).toLowerCase()) {
     throw new CoreError('path-mismatch', `登记路径(${rec.path})与布局推导(${dir})不一致,拒绝删除`);
@@ -247,13 +422,20 @@ function buildShasumsLineRe(lineMatch: string, ver: string, algo: HashAlgo): Reg
  * ★ S2(2026-09-09 安全审查):shell:open-path 收口 —— 渲染层只持有 installId,目录路径由主进程
  * 查登记表解析,三道闸后才交给 shell.openPath(= ShellExecute,任意字符串可直达 exe/UNC 是漏洞面):
  * ①id 必须命中 installs;②解析后必须落在 DevRoot 之内;③必须是真实目录。
+ * ★ F1(2026-09-14):接管项(origin='adopt')的目录【按定义】在 DevRoot 之外,②对它们改为
+ *   "本机绝对路径 + 非 UNC"——路径仍全部出自主进程登记表,S2 的收口语义(渲染层不持有任何路径)不变。
  */
 export function resolveOpenableInstallDir(devRoot: string, installs: InstallRecord[], installId: string): string {
   const rec = installs.find((i) => i.id === installId);
   if (!rec) throw new CoreError('unknown-install', `登记表中无安装记录:${installId}`);
   const base = path.resolve(devRoot) + path.sep;
   const target = path.resolve(rec.path);
-  if (!target.toLowerCase().startsWith(base.toLowerCase())) {
+  if (rec.origin === 'adopt') {
+    // 接管项:绝对路径 + 非 UNC(链接/ShellExecute 都不接受网络路径)
+    if (!path.isAbsolute(rec.path) || /^\\\\/.test(rec.path)) {
+      throw new CoreError('open-path-unc', `接管项的登记路径不是本机绝对路径,拒绝打开:${rec.path}`);
+    }
+  } else if (!target.toLowerCase().startsWith(base.toLowerCase())) {
     throw new CoreError('open-path-outside', `安装目录不在 DevRoot 内,拒绝打开:${target}`);
   }
   let st: fs.Stats;

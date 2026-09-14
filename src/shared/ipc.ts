@@ -16,6 +16,8 @@ export const Channel = {
   InstallList: 'install:list',
   InstallSwitch: 'install:switch',
   InstallUninstall: 'install:uninstall',
+  InstallAdopt: 'install:adopt', // ★ F1:接管本机已有安装(登记 + 建链,不动文件)
+  InstallForget: 'install:forget', // ★ F1:移出登记(接管项专用,绝不删文件)
   EnvState: 'env:state',
   EnvAudit: 'env:audit',
   EnvPrune: 'env:prune',
@@ -30,6 +32,7 @@ export const Channel = {
   SetupDefaults: 'setup:defaults',
   SetupCheck: 'setup:check', // 纯路径校验,不碰注册表(输入时实时用)
   ShellOpenPath: 'shell:open-path',
+  DialogPickDir: 'dialog:pick-dir', // ★ F1:系统目录选择框(主进程 dialog,渲染层拿不到 fs)
 } as const;
 
 export type ChannelName = (typeof Channel)[keyof typeof Channel];
@@ -80,6 +83,14 @@ export interface InstallView {
   size: number;
   installedAt: string;
   isCurrent: boolean;
+  /** ★ F1:来源 —— 'download' 本工具下载安装 / 'adopt' 接管的既有安装(不删文件,只能移出登记) */
+  origin: 'download' | 'adopt';
+}
+
+/** ★ F1 接管请求:工具 id + 本机既有目录(绝对路径;校验全在 main 端 core) */
+export interface InstallAdoptReq {
+  tool: string;
+  dir: string;
 }
 
 /** 下载任务入参(renderer 只知道 tool+version+sourceId,URL 拼装留在 main) */
@@ -220,6 +231,10 @@ export interface DevkitApi {
   installList(): Promise<Result<InstallView[]>>;
   installSwitch(req: { tool: string; version: string }): Promise<Result<null>>;
   installUninstall(req: { tool: string; version: string }): Promise<Result<null>>;
+  /** ★ F1 接管已有安装:返回登记后的记录(含探测到的版本);core 侧只登记 + 建链,不动任何文件 */
+  installAdopt(req: InstallAdoptReq): Promise<Result<InstallView>>;
+  /** ★ F1 移出登记:只删登记行 + 断 current 链,绝不删除目标目录里的文件 */
+  installForget(req: { tool: string; version: string }): Promise<Result<null>>;
 
   envState(): Promise<Result<EnvStateView>>;
   envAudit(): Promise<Result<EnvAuditView>>;
@@ -242,4 +257,6 @@ export interface DevkitApi {
   openPath(installId: string): Promise<Result<null>>;
   /** 首启探测默认 DevRoot + 校验结果(§4.0 步骤 1) */
   setupDefaults(): Promise<Result<{ devRoot: string; check: { ok: boolean; reasons: string[]; warnings: string[] } }>>;
+  /** ★ F1 系统目录选择框(取消/未选返回 path=null);只回传用户亲自选中的路径 */
+  pickDirectory(): Promise<Result<{ path: string | null }>>;
 }

@@ -39,6 +39,16 @@
   },
   "rootDir": "node-v{ver}-win-x64",
   "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["node.exe"],
+    "exec": "node.exe",
+    "binDir": ".",
+    "version": [
+      { "kind": "exec", "exe": "node.exe", "args": ["-v"], "regex": "v(\\d+\\.\\d+\\.\\d+)", "note": "官方发行版根目录即 node.exe;`node -v` 输出 v22.17.1(stdout)" },
+      { "kind": "dirName", "regex": "node-v(\\d+\\.\\d+\\.\\d+)-win-x64", "note": "解压目录名兜底" }
+    ],
+    "note": "★ F1 接管既有安装(如 C:\\Program Files\\nodejs):布局与 catalog 的 binAtRoot 一致,current\\node 直链该目录即可用"
+  },
   "m0": {
     "verifiedAt": "2026-09-07",
     "sample": "v26.8.1",

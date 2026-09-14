@@ -37,6 +37,41 @@ const ChecksumSchema = z
   })
   .strict();
 
+/**
+ * ★ F1(2026-09-14):接管已有安装的探测规则(清单驱动 —— 新增 Python/Git/MySQL/MinGW 等
+ * 只需在 catalog 补一段 adopt,core 零改动)。
+ * 判据 = markers 全部存在(这个目录"像"该工具)+ version 探测按序首个成功者胜出。
+ * 探测四型:
+ *   releaseFile —— 读文本文件再正则(release 文件/JAVA_VERSION="21.0.4")
+ *   fileGlob    —— 列目录取首个匹配文件名(lib/maven-core-3.9.9.jar)
+ *   dirName     —— 目录名正则(apache-maven-3.9.9 / mysql-8.0.36-winx64)
+ *   exec        —— 执行树内可执行文件,stdout+stderr 合并后正则(node.exe -v / python.exe --version)
+ * 一律取【第 1 个捕获组】;命中后只做去首尾空白与去掉前导 v(V)—— 版本串仅作标签与登记键,
+ * 不参与任何路径推导(接管项的目录从不按版本推导),故不需要 semver 化。
+ */
+const AdoptProbeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('releaseFile'), file: z.string().min(1), regex: z.string().min(1), note: z.string().optional() }).strict(),
+  z.object({ kind: z.literal('fileGlob'), dir: z.string().min(1), pattern: z.string().min(1), note: z.string().optional() }).strict(),
+  z.object({ kind: z.literal('dirName'), regex: z.string().min(1), note: z.string().optional() }).strict(),
+  z.object({ kind: z.literal('exec'), exe: z.string().min(1), args: z.array(z.string()).optional(), regex: z.string().min(1), note: z.string().optional() }).strict(),
+]);
+
+const AdoptSchema = z
+  .object({
+    /** 相对目录的标记文件,全部存在才认定"这个目录是该工具" */
+    markers: z.array(z.string()).min(1),
+    /** 版本探测链(按序试,首个成功者胜出) */
+    version: z.array(AdoptProbeSchema).min(1),
+    /** 该工具的主可执行文件(展示用;可省) */
+    exec: z.string().optional(),
+    /** 接管后 PATH 需要的子路径(文档/后续版本用:`bin`、`cmd`、`.`;本期固定 3 条 PATH 不含新工具) */
+    binDir: z.string().optional(),
+    note: z.string().optional(),
+  })
+  .strict();
+
+export type AdoptProbe = z.infer<typeof AdoptProbeSchema>;
+
 export const CatalogEntrySchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -61,6 +96,8 @@ export const CatalogEntrySchema = z
     checksum: ChecksumSchema,
     rootDir: z.string(),
     layout: z.enum(['binAtRoot', 'binSubdir']),
+    /** ★ F1:接管已有安装的探测规则(见 AdoptSchema);缺省 = 该工具不支持接管 */
+    adopt: AdoptSchema.optional(),
     assetNamingNote: z.string().optional(),
     pathPlaceholderNote: z.string().optional(),
     m0: z.record(z.unknown()).optional(),

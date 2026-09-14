@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EnvService, SANDBOX_REG_KEY, encodePowerShellCommand, psLiteral, type EnvApplyResult, type EnvVar, type ExecFileFn } from '../src/main/core/env';
+import { EnvService, SANDBOX_REG_KEY, SYSTEM_REG_KEY, encodePowerShellCommand, psLiteral, type EnvApplyResult, type EnvVar, type ExecFileFn } from '../src/main/core/env';
 import { envPlan } from '../src/main/core/paths';
 
 const FAKE_PS = '# fake env.ps1 for mock tests\n';
@@ -240,6 +240,128 @@ describe('restoreBackup', () => {
   });
 });
 
+// ---- ★F3 系统级(HKLM):闸门 / 保护名单 / 快照与回滚(全部 mock,不碰真实 HKLM) ----
+describe('★F3 系统环境变量写入(默认关 → 保护名单 → 四步)', () => {
+  const SYS: EnvVar[] = [
+    { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32' },
+    { name: 'SystemRoot', kind: 'String', value: 'C:\\Windows' },
+  ];
+  /** allowSystem 注入版 svc(缺省 = 不注入 = 闸门关闭) */
+  const svcSys = (fn: ExecFileFn, allow: boolean) => new EnvService({ userDataDir: userData, execFile: fn, psScript: FAKE_PS, allowSystem: () => allow });
+  const sysReads = (rows: EnvVar[]) => (c: string) => (c.includes('Get-SystemEnv') ? readRows(rows) : 'OK\nBROADCAST_OK');
+
+  it('闸门默认关闭(未注入 allowSystem):写入/删除一律拒,且一次 PowerShell 都不发', async () => {
+    const { calls, fn } = mockExec(() => 'OK');
+    const svc = svcWith(fn, userData); // 未注入 allowSystem = 默认关
+    await expect(svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'D:\\jdk', kind: 'ExpandString' })).rejects.toThrowError(/未开启/);
+    await expect(svc.applySystemVarRemove('JAVA_HOME')).rejects.toThrowError(/未开启/);
+    expect(calls.length).toBe(0); // 闸门在 core,不靠 UI 自觉
+  });
+
+  it('Windows 内置变量保护名单:改/删一律拒(大小写与空白容错),开关开着也不放行', async () => {
+    const { calls, fn } = mockExec(() => 'OK');
+    const svc = svcSys(fn, true);
+    for (const n of ['SystemRoot', 'path', 'TEMP', '  Windir ']) {
+      await expect(svc.applySystemVarSet({ name: n, value: 'x', kind: 'String' })).rejects.toThrowError(/Windows 内置系统变量/);
+      await expect(svc.applySystemVarRemove(n)).rejects.toThrowError(/Windows 内置系统变量/);
+    }
+    expect(calls.length).toBe(0); // 名单判定在发 PS 之前
+  });
+
+  it('变量名校验:空 / 含 = ; % 与空白 → system-var-name', async () => {
+    const { fn } = mockExec(() => 'OK');
+    const svc = svcSys(fn, true);
+    for (const n of ['', '   ', 'A=B', 'A B', 'A%B', 'A;B']) {
+      await expect(svc.applySystemVarSet({ name: n, value: 'x', kind: 'String' })).rejects.toThrowError(/变量名/);
+    }
+  });
+
+  it('正路:快照(scope=system)→ Set-SystemEnv → 广播;快照可被 listBackups 标为系统级', async () => {
+    const { calls, fn } = mockExec(sysReads(SYS));
+    const svc = svcSys(fn, true);
+    const r = await svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'D:\\dev\\current\\jdk', kind: 'ExpandString' });
+    expect(r.changed).toEqual(['JAVA_HOME']);
+    expect(r.backupFile).toBeTruthy();
+    expect(calls[0]!.calls.trim()).toBe('Get-SystemEnv');
+    expect(calls[1]!.calls).toContain("Set-SystemEnv -Name 'JAVA_HOME' -Value 'D:\\dev\\current\\jdk' -Kind ExpandString");
+    expect(calls[1]!.calls).toContain('Publish-EnvChange');
+    const bk = JSON.parse(fs.readFileSync(r.backupFile!, 'utf8')) as { scope?: string; regKey: string; rows: EnvVar[] };
+    expect(bk.scope).toBe('system');
+    expect(bk.regKey).toBe(SYSTEM_REG_KEY);
+    expect(bk.rows.map((x) => x.name)).toEqual(['Path', 'SystemRoot']);
+    expect(svc.listBackups()[0]!.scope).toBe('system');
+  });
+
+  it('幂等:值/类型都一致 → 零写入零备份(只读一次)', async () => {
+    const { calls, fn } = mockExec(sysReads([{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'X' }]));
+    const svc = svcSys(fn, true);
+    expect(await svc.applySystemVarSet({ name: 'java_home', value: 'X', kind: 'ExpandString' })).toEqual({ changed: [], backupFile: null, broadcast: null });
+    expect(calls.length).toBe(1);
+  });
+
+  it('删除:快照 → Remove-SystemEnv → 广播;本来不存在 → noop', async () => {
+    const { calls, fn } = mockExec(sysReads([{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'X' }]));
+    const svc = svcSys(fn, true);
+    const r = await svc.applySystemVarRemove('java_home');
+    expect(r.changed).toEqual(['JAVA_HOME']);
+    expect(calls[1]!.calls).toContain("Remove-SystemEnv -Name 'JAVA_HOME'");
+    const svc2 = svcSys(mockExec(sysReads([])).fn, true);
+    expect(await svc2.applySystemVarRemove('NOPE')).toEqual({ changed: [], backupFile: null, broadcast: null });
+  });
+
+  it('写入被系统拒(未提权)→ 归一为 system-need-admin,并已尽力用快照还原', async () => {
+    const { calls, fn } = mockExec((c) => {
+      if (c.includes('Get-SystemEnv')) return readRows(SYS);
+      if (c.includes('Set-SystemEnv')) throw new Error('Requested registry access is not allowed. Access is denied.');
+      return 'OK\nBROADCAST_OK';
+    });
+    const svc = svcSys(fn, true);
+    await expect(svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'X', kind: 'String' })).rejects.toThrowError(/需要管理员权限/);
+    // calls: ①Get-SystemEnv ②Set-SystemEnv(失败) ③Get-SystemEnv(还原前读回) ④还原写(值未漂移则零写)
+    expect(calls[1]!.calls).toContain('Set-SystemEnv');
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('系统快照回滚:开关关 → 拒;开关开 → 只走系统 PS 口,且【永不删除】Windows 内置变量', async () => {
+    const file = path.join(userData, 'env_backups', '2026-01-01T00-00-00-000Z.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // 伪造一份"缺 SystemRoot/Path"的系统快照 —— 忠实回滚会抹掉它们,内置保护必须拦住
+    fs.writeFileSync(file, JSON.stringify({
+      ts: '2026-01-01T00:00:00.000Z', regKey: SYSTEM_REG_KEY, scope: 'system',
+      rows: [{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'X' }],
+    }), 'utf8');
+    const { fn: fnOff } = mockExec(() => 'OK');
+    await expect(svcSys(fnOff, false).restoreBackup(file)).rejects.toThrowError(/未开启/);
+
+    const current: EnvVar[] = [
+      { name: 'JAVA_HOME', kind: 'ExpandString', value: 'OLD' },
+      { name: 'SystemRoot', kind: 'String', value: 'C:\\Windows' },
+      { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32' },
+    ];
+    const { calls, fn } = mockExec(sysReads(current));
+    const svc = svcSys(fn, true);
+    const r = await svc.restoreBackup(file);
+    expect(r.changed).toEqual(['JAVA_HOME']);
+    expect(calls[1]!.calls).not.toContain('Remove-SystemEnv'); // 内置变量一条都没删
+    expect(calls[1]!.calls).toContain("Set-SystemEnv -Name 'JAVA_HOME' -Value 'X' -Kind ExpandString");
+  });
+
+  it('老备份(无 scope 字段、regKey=Environment)仍按用户级处理;isElevated 探测失败按 false', async () => {
+    const file = path.join(userData, 'env_backups', '2025-01-01T00-00-00-000Z.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const rows: EnvVar[] = [{ name: 'Path', kind: 'ExpandString', value: 'C:\\Windows' }];
+    fs.writeFileSync(file, JSON.stringify({ ts: 'x', regKey: 'Environment', rows }), 'utf8');
+    const { fn } = mockExec((c) => (c.includes('Get-Env') ? readRows(rows) : 'OK\nBROADCAST_OK'));
+    const svc = svcWith(fn, userData); // 不注入 allowSystem:用户级回滚不受系统闸门影响
+    expect(svc.listBackups()[0]!.scope).toBe('user');
+    expect(await svc.restoreBackup(file)).toEqual({ changed: [], backupFile: null, broadcast: 'ok' });
+
+    expect(await svcSys(mockExec(() => 'ELEVATED_YES').fn, true).isElevated()).toBe(true);
+    expect(await svcSys(mockExec(() => 'ELEVATED_NO').fn, true).isElevated()).toBe(false);
+    expect(await svcSys(mockExec(() => { throw new Error('ps dead'); }).fn, true).isElevated()).toBe(false);
+  });
+});
+
 // ---- 真机链路(§11:自动化全部打沙盒键,测完全删;真实 PATH 只允许手动走查) ----
 describe.skipIf(process.platform !== 'win32')('EnvService 真机链路(HKCU:\\' + SANDBOX_REG_KEY + ')', () => {
   const execP = promisify(execFile);
@@ -289,5 +411,22 @@ describe.skipIf(process.platform !== 'win32')('EnvService 真机链路(HKCU:\\' 
         `if ($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('${SANDBOX_REG_KEY}')) {'GONE'} else {'HERE'}`]);
       expect(sub.stdout.trim()).toBe('GONE');
     }
+  }, 120_000);
+
+  it('★F3 真机(只读):env.ps1 的 System 函数可用 —— 读到系统变量、Path 保原样、Get-Elevated 出布尔', async () => {
+    // 本用例【不写入任何系统值】(写 HKLM 需管理员),只验证新函数确实被 PowerShell 正确解析与执行
+    // —— 顺带守住 env.ps1 的 BOM/语法铁律(§7.1:无 BOM 会被 PowerShell 5.1 按 GBK 误读而炸)。
+    const svc = new EnvService({ userDataDir: userData });
+    const rows = await svc.readSystemVars();
+    expect(rows.length).toBeGreaterThan(0);
+    // 本机 HKLM 系统环境的标准成员(windir/ComSpec/Path;SystemRoot 是内核内置变量,不落在这个键里)
+    const names = rows.map((r) => r.name.toLowerCase());
+    expect(names).toContain('windir');
+    expect(names).toContain('path');
+    const p = rows.find((r) => r.name.toLowerCase() === 'path')!;
+    expect(p.kind).toBe('ExpandString'); // REG_EXPAND_SZ,%SystemRoot% 不被展开
+    expect(p.value).toContain('%SystemRoot%');
+    expect(p.value).toContain('system32');
+    expect(typeof (await svc.isElevated())).toBe('boolean');
   }, 120_000);
 });

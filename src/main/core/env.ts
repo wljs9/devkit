@@ -19,9 +19,14 @@ export interface EnvVar {
   value: string;
 }
 
+/** ★ F3:环境变量作用域 —— 'user' = HKCU\Environment;'system' = HKLM\...\Environment(需管理员) */
+export type EnvScope = 'user' | 'system';
+
 export interface EnvBackup {
   ts: string;
   regKey: string;
+  /** ★ F3:快照作用域;老备份(无此字段)按 'user' 处理 */
+  scope?: EnvScope;
   rows: EnvVar[];
 }
 
@@ -35,6 +40,13 @@ export interface EnvApplyResult {
 /** applyRemoval 返回:在 EnvApplyResult 之上带实际删除的条目原文(§4.4 清理结果展示) */
 export interface EnvRemovalResult extends EnvApplyResult {
   removed: string[];
+}
+
+/** ★F3 快照作用域:优先显式 scope;老备份按 regKey 反推(SYSTEM_REG_KEY = 系统级) */
+function scopeOfBackup(bk: EnvBackup): EnvScope {
+  if (bk?.scope === 'system') return 'system';
+  if (bk?.scope === 'user') return 'user';
+  return bk?.regKey === SYSTEM_REG_KEY ? 'system' : 'user';
 }
 
 /** BROADCAST_OK/BROADCAST_TIMEOUT 标记解析(§7.1 Publish-EnvChange 的 stdout) */
@@ -52,6 +64,37 @@ const defaultExec: ExecFileFn = async (cmd, args) => {
 /** §11:自动化测试沙盒注册表键(测完全删) */
 export const SANDBOX_REG_KEY = 'Environment_DevKitTest';
 
+/** ★ F3:系统级环境变量键(HKLM;写入需管理员权限) */
+export const SYSTEM_REG_KEY = 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
+
+/**
+ * ★ F3 Windows 内置系统变量保护名单(不可修改、不可删除)—— 系统本体与其他程序依赖其存在,
+ * 误删 SystemRoot/ComSpec/TEMP 会把机器搞坏。用户自己新增的系统变量(JAVA_HOME/MAVEN_HOME 等)
+ * 不在名单内 → 可增删改(产品文档 §3.1"动系统级必须显式二次确认"由设置开关承担)。
+ * 含系统 `Path`:用户已定口径 —— 系统 PATH 条目不在本期开放编辑范围(只读展示)。
+ */
+export const PROTECTED_SYSTEM_VARS: readonly string[] = [
+  'allusersprofile', 'appdata', 'commonprogramfiles', 'commonprogramfiles(x86)', 'commonprogramw6432',
+  'computername', 'comspec', 'driverdata', 'homedrive', 'homepath', 'localappdata', 'logonserver',
+  'number_of_processors', 'os', 'path', 'pathext', 'processor_architecture', 'processor_identifier',
+  'processor_level', 'processor_revision', 'programdata', 'programfiles', 'programfiles(x86)',
+  'programw6432', 'public', 'systemdrive', 'systemroot', 'temp', 'tmp', 'userdomain',
+  'userdomain_roamingprofile', 'username', 'userprofile', 'windir',
+];
+
+/** 是否 Windows 内置(受保护)系统变量:大小写不敏感,前后空白容错 */
+export function isProtectedSystemVar(name: string): boolean {
+  return PROTECTED_SYSTEM_VARS.includes(String(name ?? '').trim().toLowerCase());
+}
+
+/** 系统变量名合法性:非空、不含 = ; % 与空白、长度受限(= 是 Windows 保留前缀,%= 展开符) */
+export function assertSystemVarName(name: string): void {
+  const n = String(name ?? '').trim();
+  if (n.length === 0) throw new CoreError('system-var-name', '变量名不能为空');
+  if (n.length > 128) throw new CoreError('system-var-name', `变量名过长(${n.length} > 128):${n}`);
+  if (!/^[^=\s;%]+$/.test(n)) throw new CoreError('system-var-name', `变量名含非法字符(不可含 = ; % 与空白):${n}`);
+}
+
 /** PS 单引号字面量(EncodedCommand 内再逃逸,双保险) */
 export function psLiteral(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
@@ -68,6 +111,8 @@ export interface EnvServiceOptions {
   execFile?: ExecFileFn;
   /** 测试注入 env.ps1 内容;缺省读仓库 resources/ */
   psScript?: string;
+  /** ★ F3 系统级写入门闸:壳层注入 `settings.allowSystemEnv`;**缺省(测试/未接线)一律拒** */
+  allowSystem?: () => boolean;
 }
 
 export class EnvService {
@@ -186,6 +231,101 @@ export class EnvService {
     }
   }
 
+  // ---------------------------------------------------------------- ★ F3 系统级(HKLM,2026-09-14)
+
+  /** 系统级写入门闸:关闭(默认)时任何系统写入一律拒 —— 闸门在 core,不靠 UI 自觉 */
+  private assertSystemWritable(): void {
+    if (!(this.opts.allowSystem?.() ?? false)) {
+      throw new CoreError('system-write-disabled', '系统环境变量写入未开启:请到「设置 → 系统环境变量」打开开关(默认关闭)');
+    }
+  }
+
+  /** 管理员权限探测(写 HKLM 的前置条件;探测失败按 false 处理,UI 据此先讲清楚) */
+  async isElevated(): Promise<boolean> {
+    try {
+      return /ELEVATED_YES/.test(await this.runPowerShell(['Get-Elevated']));
+    } catch {
+      return false;
+    }
+  }
+
+  /** 系统变量全量读取(读不需要管理员;失败按空表降级,由 UI 提示) */
+  async readSystemVars(): Promise<EnvVar[]> {
+    const out = await this.runPowerShell(['Get-SystemEnv']);
+    const line = out.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('[')).pop();
+    if (!line) return [];
+    const rows = JSON.parse(line) as Array<{ name?: unknown; kind?: unknown; value?: unknown }>;
+    return rows.map((r) => ({ name: String(r.name), kind: String(r.kind ?? 'String'), value: String(r.value ?? '') }));
+  }
+
+  /**
+   * 系统变量写入(新增/修改同口)——§7.2 四步的系统版:
+   * 闸门 → 变量名校验 → 内置保护名单 → 快照 → 写+广播 → 失败还原。
+   * 幂等:值/类型都相同 → 零写入零备份。
+   */
+  async applySystemVarSet(v: { name: string; value: string; kind: string }): Promise<EnvApplyResult> {
+    const name = String(v.name ?? '').trim();
+    assertSystemVarName(name);
+    if (isProtectedSystemVar(name)) {
+      throw new CoreError('system-var-protected', `${name} 是 Windows 内置系统变量,不支持修改(改坏会影响系统运行)`);
+    }
+    const kind = v.kind === 'String' || v.kind === 'ExpandString' ? v.kind : null;
+    if (kind === null) throw new CoreError('system-var-kind', `不支持的值类型:${v.kind}(仅 String/ExpandString)`);
+    this.assertSystemWritable();
+    const rows = await this.readSystemVars();
+    const cur = rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
+    if (cur && cur.value === v.value && cur.kind === kind) return { changed: [], backupFile: null, broadcast: null };
+    const backupFile = this.writeBackup(rows, 'system');
+    const calls = [
+      `Set-SystemEnv -Name ${psLiteral(name)} -Value ${psLiteral(v.value)} -Kind ${kind}`,
+      'Publish-EnvChange',
+    ];
+    try {
+      return { changed: [name], backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
+    } catch (e) {
+      try {
+        await this.restoreTo(rows, 'system');
+      } catch (restoreErr) {
+        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
+      }
+      throw this.asSystemError(e, '写入');
+    }
+  }
+
+  /** 系统变量删除(§7.2 四步的删除方向);内置保护名单内一律拒 */
+  async applySystemVarRemove(name: string): Promise<EnvApplyResult> {
+    const n = String(name ?? '').trim();
+    assertSystemVarName(n);
+    if (isProtectedSystemVar(n)) {
+      throw new CoreError('system-var-protected', `${n} 是 Windows 内置系统变量,不支持删除(删掉会影响系统运行)`);
+    }
+    this.assertSystemWritable();
+    const rows = await this.readSystemVars();
+    const cur = rows.find((r) => r.name.toLowerCase() === n.toLowerCase());
+    if (!cur) return { changed: [], backupFile: null, broadcast: null }; // 本来就没有 → 幂等
+    const backupFile = this.writeBackup(rows, 'system');
+    const calls = [`Remove-SystemEnv -Name ${psLiteral(cur.name)}`, 'Publish-EnvChange'];
+    try {
+      return { changed: [cur.name], backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
+    } catch (e) {
+      try {
+        await this.restoreTo(rows, 'system');
+      } catch (restoreErr) {
+        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
+      }
+      throw this.asSystemError(e, '删除');
+    }
+  }
+
+  /** HKLM 写入被系统拒绝(未提权)→ 归一为可读原因,而非把 PS 的原始堆栈丢给用户 */
+  private asSystemError(e: unknown, action: string): unknown {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/access is denied|unauthorized|拒绝访问|权限|SecurityException/i.test(msg)) {
+      return new CoreError('system-need-admin', `系统环境变量${action}需要管理员权限:请以管理员身份重新运行 DevKit 后重试`, { cause: msg });
+    }
+    return e;
+  }
+
   /** writeBackup 落盘命名:<ISO 时间戳 :.全替->.json(形如 2026-09-08T06-31-12-345Z.json) */
   private static readonly BACKUP_NAME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
 
@@ -200,18 +340,23 @@ export class EnvService {
     return EnvService.BACKUP_NAME_RE.test(path.basename(abs));
   }
 
-  /** 从备份文件回滚(历史页 [回滚] 的后端;入口收口见 isBackupFile —— 任意文件路径一律拒) */
+  /**
+   * 从备份文件回滚(历史页 [回滚] 的后端;入口收口见 isBackupFile —— 任意文件路径一律拒)。
+   * ★F3:按快照自带作用域回滚到对应 hive;系统级快照回滚同样要先过开关闸门。
+   */
   async restoreBackup(file: string): Promise<EnvApplyResult> {
     if (!this.isBackupFile(file)) {
       throw new CoreError('env-backup-path', `回滚只接受 ${this.backupDir} 下的标准备份文件:${file}`);
     }
     const bk = JSON.parse(fs.readFileSync(file, 'utf8')) as EnvBackup;
     if (!Array.isArray(bk?.rows)) throw new CoreError('env-backup-invalid', `备份文件不合法:${file}`);
-    const names = await this.restoreTo(bk.rows);
+    const scope = scopeOfBackup(bk);
+    if (scope === 'system') this.assertSystemWritable();
+    const names = await this.restoreTo(bk.rows, scope);
     return { changed: names, backupFile: null, broadcast: 'ok' };
   }
 
-  listBackups(): { file: string; ts: string; names: string[] }[] {
+  listBackups(): { file: string; ts: string; names: string[]; scope: EnvScope }[] {
     if (!fs.existsSync(this.backupDir)) return [];
     return fs
       .readdirSync(this.backupDir)
@@ -222,45 +367,56 @@ export class EnvService {
         const full = path.join(this.backupDir, f);
         try {
           const bk = JSON.parse(fs.readFileSync(full, 'utf8')) as EnvBackup;
-          return { file: full, ts: bk.ts, names: bk.rows.map((r) => r.name) };
+          return { file: full, ts: bk.ts, names: bk.rows.map((r) => r.name), scope: scopeOfBackup(bk) };
         } catch {
-          return { file: full, ts: f, names: [] }; // 坏备份也列出(标坏),由 UI 决定展示
+          return { file: full, ts: f, names: [], scope: 'user' as const }; // 坏备份也列出(标坏),由 UI 决定展示
         }
       });
   }
 
-  /** 全量同步到目标行集:多余的删、缺失/漂移的写回原类型 */
-  private async restoreTo(target: EnvVar[]): Promise<string[]> {
-    const current = await this.readAll();
+  /**
+   * 全量同步到目标行集:多余的删、缺失/漂移的写回原类型(按 scope 选 hive)。
+   * ★F3 系统级特有保护:回滚【永不删除】Windows 内置变量 —— 即便备份里恰好缺了 SystemRoot,
+   * 也绝不把它从系统里抹掉(比"忠实回滚"更重要的一条)。
+   */
+  private async restoreTo(target: EnvVar[], scope: EnvScope = 'user'): Promise<string[]> {
+    const current = scope === 'system' ? await this.readSystemVars() : await this.readAll();
+    const keyArg = scope === 'system' ? '' : ` -Key ${psLiteral(this.regKey)}`;
+    const setFn = scope === 'system' ? 'Set-SystemEnv' : 'Set-Env';
+    const rmFn = scope === 'system' ? 'Remove-SystemEnv' : 'Remove-Env';
     const calls: string[] = [];
     const touched: string[] = [];
     for (const c of current) {
-      if (!target.some((t) => t.name.toLowerCase() === c.name.toLowerCase())) {
-        calls.push(`Remove-Env -Key ${psLiteral(this.regKey)} -Name ${psLiteral(c.name)}`);
-        touched.push(c.name);
-      }
+      if (target.some((t) => t.name.toLowerCase() === c.name.toLowerCase())) continue;
+      if (scope === 'system' && isProtectedSystemVar(c.name)) continue; // 红线的兜底:内置变量只增不减
+      calls.push(`${rmFn}${keyArg} -Name ${psLiteral(c.name)}`);
+      touched.push(c.name);
     }
     for (const t of target) {
       const kind = t.kind === 'String' || t.kind === 'ExpandString' ? t.kind : null;
       if (kind === null) throw new CoreError('env-restore-kind', `备份含不支持的值类型 ${t.kind}:${t.name}`);
       const cur = current.find((c) => c.name.toLowerCase() === t.name.toLowerCase());
       if (!cur || cur.value !== t.value || cur.kind !== t.kind) {
-        calls.push(`Set-Env -Key ${psLiteral(this.regKey)} -Name ${psLiteral(t.name)} -Value ${psLiteral(t.value)} -Kind ${kind}`);
+        calls.push(`${setFn}${keyArg} -Name ${psLiteral(t.name)} -Value ${psLiteral(t.value)} -Kind ${kind}`);
         touched.push(t.name);
       }
     }
     if (calls.length === 0) return [];
     calls.push('Publish-EnvChange');
-    await this.runPowerShell(calls);
+    try {
+      await this.runPowerShell(calls);
+    } catch (e) {
+      throw scope === 'system' ? this.asSystemError(e, '回滚') : e;
+    }
     return touched;
   }
 
   /** ①全量快照:userData\env_backups\<ts>.json;保留最近 20 份(产品文档 §6) */
-  private writeBackup(rows: EnvVar[]): string {
+  private writeBackup(rows: EnvVar[], scope: EnvScope = 'user'): string {
     const ts = new Date().toISOString();
     fs.mkdirSync(this.backupDir, { recursive: true });
     const file = path.join(this.backupDir, `${ts.replace(/[:.]/g, '-')}.json`);
-    const bk: EnvBackup = { ts, regKey: this.regKey, rows };
+    const bk: EnvBackup = { ts, regKey: scope === 'system' ? SYSTEM_REG_KEY : this.regKey, scope, rows };
     fs.writeFileSync(file, JSON.stringify(bk, null, 2), 'utf8');
     const olds = fs.readdirSync(this.backupDir).filter((f) => f.endsWith('.json')).sort();
     while (olds.length > 20) {

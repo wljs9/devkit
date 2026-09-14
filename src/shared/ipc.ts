@@ -22,6 +22,9 @@ export const Channel = {
   EnvAudit: 'env:audit',
   EnvPrune: 'env:prune',
   EnvRestore: 'env:restore',
+  EnvSystemList: 'env:system-list', // ★ F3:系统级(HKLM)变量读取 + 开关/管理员状态
+  EnvSystemSet: 'env:system-set', // ★ F3:系统变量新增/修改(需开关开 + 管理员)
+  EnvSystemRemove: 'env:system-remove', // ★ F3:系统变量删除(内置名单一律拒)
   HistoryList: 'history:list',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',
@@ -134,8 +137,8 @@ export interface EnvStateView {
   /** DevRoot 未定/目录缺失时 false —— 顶栏黄色"环境未接入"提示依据(§4.0) */
   wired: boolean;
   entries: ManagedEntryView[];
-  /** 快照摘要(§4.4 状态备份区;M3 完整,本期只透出列表) */
-  backups: { ts: string; file: string; names: string[] }[];
+  /** 快照摘要(§4.4 状态备份区;★F3 起带 scope,系统级快照单独标注) */
+  backups: { ts: string; file: string; names: string[]; scope: 'user' | 'system' }[];
 }
 
 /** Setup 向导第 2 步:PATH diff 预览(§4.0 "展示改前/改后") */
@@ -198,6 +201,25 @@ export interface EnvPruneResult {
   broadcast: 'ok' | 'timeout' | null;
 }
 
+/** ★ F3 系统环境变量行(HKLM) */
+export interface SystemVarView {
+  name: string;
+  kind: string;
+  value: string;
+  /** Windows 内置变量(系统运行依赖)→ UI 只读,core 侧同样拒改拒删(双保险) */
+  protected: boolean;
+}
+
+/** ★ F3 env:system-list 返回 */
+export interface SystemEnvView {
+  /** 设置页开关状态(默认 false);false 时 UI 只读展示并引导去设置 */
+  enabled: boolean;
+  /** 当前进程是否管理员 —— 写 HKLM 的前置条件,事先讲清楚比事后报错好 */
+  elevated: boolean;
+  /** 读取失败(无权限/PS 异常)为 null,UI 显示"不可读"而非空白表 */
+  rows: SystemVarView[] | null;
+}
+
 /** cache:clear 返回(§4.6 清理缓存) */
 export interface CacheClearResult {
   files: number;
@@ -214,6 +236,11 @@ export interface SettingsView {
   sourcePrefixes: Record<string, string>;
   /** §4.6 缓存区:下载缓存占用(DevRoot 未定/不可读为 null) */
   cache: { dir: string; files: number; bytes: number } | null;
+  /**
+   * ★ F3 系统环境变量写开关(**默认 false**)。产品文档 §3.1「动系统级必须显式二次确认」的落点:
+   * 关 = core 层任何 HKLM 写入一律拒(system-write-disabled);开 = 允许增改删【非内置】的系统变量。
+   */
+  allowSystemEnv: boolean;
   /** §4.6 关于 */
   appVersion: string;
   catalogVersion: string;
@@ -240,6 +267,11 @@ export interface DevkitApi {
   envAudit(): Promise<Result<EnvAuditView>>;
   envPrune(req: { entries: string[] }): Promise<Result<EnvPruneResult>>;
   envRestore(req: { file: string }): Promise<Result<null>>;
+
+  /** ★ F3 系统环境变量(HKLM):读列表 + 增/改/删;写入需设置开关打开且进程为管理员 */
+  envSystemList(): Promise<Result<SystemEnvView>>;
+  envSystemSet(req: { name: string; value: string; kind: string }): Promise<Result<null>>;
+  envSystemRemove(req: { name: string }): Promise<Result<null>>;
 
   historyList(req?: { kind?: string; limit?: number }): Promise<Result<HistoryViewEntry[]>>;
 

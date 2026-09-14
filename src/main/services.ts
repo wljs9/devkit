@@ -46,7 +46,13 @@ export function initServices(): Services {
   //   dev → app 根 resources/;打包 → process.resourcesPath/env.ps1(electron-builder.yml extraResources 落此)。
   const psPath = app.isPackaged ? path.join(process.resourcesPath, 'env.ps1') : path.join(app.getAppPath(), 'resources', 'env.ps1');
   const psScript = fs.existsSync(psPath) ? fs.readFileSync(psPath, 'utf8') : undefined;
-  const env = new EnvService({ userDataDir, ...(psScript ? { psScript } : {}) }); // 真实键 HKCU\Environment(§11:UI 走查用真实键;自动化测试另注沙盒键)
+  // 真实键 HKCU\Environment(§11:UI 走查用真实键;自动化测试另注沙盒键)
+  // ★F3:系统级写入门闸由设置项 allowSystemEnv 决定(默认关)—— 每次写入现读,改开关立即生效
+  const env = new EnvService({
+    userDataDir,
+    ...(psScript ? { psScript } : {}),
+    allowSystem: () => store.load().settings['allowSystemEnv'] === true,
+  });
   const catalogCache = new FileCachePort(path.join(userDataDir, 'catalog_cache.json'));
 
   // catalog/*.json 随包发布:dev 期在仓库根,打包后在 resources/(electron-builder extraResources)

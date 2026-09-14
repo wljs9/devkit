@@ -81,3 +81,60 @@ public static class DevKitWin {
   $ret = [DevKitWin]::SendMessageTimeout([IntPtr]0xFFFF, 0x1A, [IntPtr]::Zero, 'Environment', 0x2, 5000, [ref]$result)
   if ($ret -eq [IntPtr]::Zero) { return 'BROADCAST_TIMEOUT' } else { return 'BROADCAST_OK' }
 }
+
+# ---------------------------------------------------------------- ★ F3(2026-09-14)系统级(HKLM)
+# 分工:保护名单(Windows 内置变量)、开关闸门(默认关)、快照与回滚全部在 core/env.ts ——
+# 本层只负责"按正确类型读/写/删",以及"无管理员权限时老老实实报错"。
+# 铁律不变:一切写入经 .NET SetValue 显式指定 RegistryValueKind,防 %VAR% 被打平。
+
+function Get-SystemEnv {
+  # 全量读取系统环境变量(读不需要管理员:只开只读句柄)。
+  $sub = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+  if ($null -eq $sub) { return '[]' }
+  $rows = @()
+  foreach ($name in $sub.GetValueNames()) {
+    if ($name -eq '') { continue }
+    $raw = $sub.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $kind = [string]$sub.GetValueKind($name)
+    if ($raw -is [array]) { $raw = $raw -join ';' }
+    $rows += [pscustomobject]@{ name = $name; kind = $kind; value = [string]$raw }
+  }
+  $sub.Close()
+  return (ConvertTo-Json -InputObject @($rows) -Compress)
+}
+
+function Set-SystemEnv {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [string]$Value = '',
+    [ValidateSet('String', 'ExpandString')][string]$Kind = 'ExpandString'
+  )
+  $vk = [Enum]::Parse([Microsoft.Win32.RegistryValueKind], $Kind)
+  # 无管理员权限时 CreateSubKey 抛 UnauthorizedAccessException → 由 core 归一为 system-need-admin
+  $sub = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+  try { $sub.SetValue($Name, $Value, $vk) } finally { $sub.Close() }
+  return 'OK'
+}
+
+function Remove-SystemEnv {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)][string]$Name)
+  $sub = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)
+  if ($null -ne $sub) {
+    try {
+      if ($sub.GetValueNames() -contains $Name) { $sub.DeleteValue($Name) }
+    } finally { $sub.Close() }
+  }
+  return 'OK'
+}
+
+function Get-Elevated {
+  # 当前进程是否管理员:写 HKLM 的前置条件,UI 事先讲清楚,别让用户点完才报错。
+  try {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $p = New-Object Security.Principal.WindowsPrincipal($id)
+    if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { return 'ELEVATED_YES' }
+  } catch { }
+  return 'ELEVATED_NO'
+}

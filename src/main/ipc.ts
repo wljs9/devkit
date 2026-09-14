@@ -9,8 +9,9 @@ import {
   Channel, PushChannel,
   type Result, type SettingsView, type DownloadProgressEvent, type DownloadTaskStatus,
   type EnvAuditView, type EnvStateView, type InstallView, type ManagedEntryView,
+  type SystemEnvView, type SystemVarView,
 } from '../shared/ipc';
-import type { EnvVar } from './core/env';
+import { isProtectedSystemVar, type EnvVar } from './core/env';
 import type { InstallRecord } from './core/store';
 import { CoreError, isCoreError } from './core/errors';
 import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
@@ -228,6 +229,44 @@ export function registerIpc(): void {
     }),
   );
 
+  // —— ★ F3 系统环境变量(HKLM):读列表 + 增/改/删。闸门/保护名单/快照全在 core(不靠 UI 自觉)
+  ipcMain.handle(Channel.EnvSystemList, () =>
+    wrap(async (): Promise<SystemEnvView> => {
+      const enabled = s.store.load().settings['allowSystemEnv'] === true;
+      let rows: SystemVarView[] | null = null;
+      try {
+        rows = (await s.env.readSystemVars())
+          .map((v) => ({ name: v.name, kind: v.kind, value: v.value, protected: isProtectedSystemVar(v.name) }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      } catch {
+        rows = null; // 读不到(HKLM 不可达/PS 异常)由 UI 说明,不当作"空"
+      }
+      return { enabled, elevated: await s.env.isElevated(), rows };
+    }),
+  );
+
+  ipcMain.handle(Channel.EnvSystemSet, (_e, req: { name: string; value: string; kind: string }) =>
+    wrap(async () => {
+      const t0 = Date.now();
+      const r = await s.env.applySystemVarSet({ name: req.name, value: req.value ?? '', kind: req.kind ?? 'ExpandString' });
+      if (r.changed.length > 0) {
+        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { scope: 'system', set: r.changed }, backupFile: r.backupFile ?? undefined });
+      }
+      return null;
+    }),
+  );
+
+  ipcMain.handle(Channel.EnvSystemRemove, (_e, req: { name: string }) =>
+    wrap(async () => {
+      const t0 = Date.now();
+      const r = await s.env.applySystemVarRemove(req.name);
+      if (r.changed.length > 0) {
+        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { scope: 'system', removed: r.changed }, backupFile: r.backupFile ?? undefined });
+      }
+      return null;
+    }),
+  );
+
   ipcMain.handle(Channel.HistoryList, (_e, req?: { kind?: string; limit?: number }) =>
     wrap(() =>
       s.history.list({ kind: req?.kind as never, limit: req?.limit }).map((h) => ({
@@ -329,7 +368,7 @@ function requireDevRoot(s: Services): string {
 
 async function envState(s: Services): Promise<EnvStateView> {
   const devRoot = s.getDevRoot();
-  const backups = s.env.listBackups().map((b) => ({ ts: b.ts, file: b.file, names: b.names }));
+  const backups = s.env.listBackups().map((b) => ({ ts: b.ts, file: b.file, names: b.names, scope: b.scope }));
   if (!devRoot) return { devRoot: null, wired: false, entries: [], backups };
   const rows = await s.env.readAll();
   const entries = managedEntries(devRoot, rows);
@@ -386,6 +425,11 @@ function sanitizeSettingsPatch(patch: Partial<SettingsView>): Record<string, unk
     if (!(c >= 1 && c <= 6)) throw new CoreError('bad-concurrency', '并发数须为 1~6 的整数');
     out.concurrency = c;
   }
+  // ★F3:系统环境变量写开关(布尔;真正闸门在 core EnvService.assertSystemWritable)
+  if (patch.allowSystemEnv !== undefined) {
+    if (typeof patch.allowSystemEnv !== 'boolean') throw new CoreError('bad-allow-system', 'allowSystemEnv 必须是布尔值');
+    out.allowSystemEnv = patch.allowSystemEnv;
+  }
   if (patch.sourcePriority !== undefined) {
     const clean: Record<string, string[]> = {};
     for (const [tool, ids] of Object.entries(patch.sourcePriority)) {
@@ -414,6 +458,7 @@ function settingsView(s: Services): SettingsView {
     proxy: typeof st['proxy'] === 'string' ? (st['proxy'] as string) : '',
     concurrency: typeof st['concurrency'] === 'number' ? (st['concurrency'] as number) : 2,
     sourcePrefixes: (st['sourcePrefixes'] as Record<string, string>) ?? {},
+    allowSystemEnv: st['allowSystemEnv'] === true, // 默认关(缺省/脏值一律按关处理)
     cache: devRoot ? cacheStats(devRoot) : null,
     appVersion: app.getVersion(),
     catalogVersion: s.catalogVersion(),

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Channel, PushChannel } from '../src/shared/ipc';
-import type { DevkitApi, DownloadProgressEvent, EnvAuditView, InstallView } from '../src/shared/ipc';
+import type { DevkitApi, DownloadProgressEvent, EnvAuditView, InstallView, SystemEnvView } from '../src/shared/ipc';
 import type { InstallRecord } from '../src/main/core/store';
 
 // 以 (keyof T)[] 标注:字段名漂移/笔误会在【编译期】报错 —— 这才是"防契约漂移"的门禁本意。
@@ -48,6 +48,33 @@ describe('§8 通道全集', () => {
     for (const c of ['install:adopt', 'install:forget', 'dialog:pick-dir']) {
       expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
     }
+  });
+
+  it('★ F3 新增通道(系统级环境变量)全部在册', () => {
+    for (const c of ['env:system-list', 'env:system-set', 'env:system-remove']) {
+      expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
+    }
+  });
+
+  it('★ F3 系统变量 DTO 可 JSON 往返;开关状态默认按关处理', () => {
+    const view: SystemEnvView = {
+      enabled: false,
+      elevated: false,
+      rows: [
+        { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32', protected: true },
+        { name: 'JAVA_HOME', kind: 'ExpandString', value: 'C:\\jdk-21', protected: false },
+      ],
+    };
+    expect(JSON.parse(JSON.stringify(view))).toEqual(view);
+    // 契约签名守卫:三个方法各收一个 DTO
+    const set: DevkitApi['envSystemSet'] = (req) => Promise.resolve({ ok: true as const, data: null });
+    const rm: DevkitApi['envSystemRemove'] = (req) => Promise.resolve({ ok: true as const, data: null });
+    expect(set.length).toBe(1);
+    expect(rm.length).toBe(1);
+    return Promise.all([
+      set({ name: 'JAVA_HOME', value: 'C:\\jdk-21', kind: 'ExpandString' }).then((r) => expect(r).toEqual({ ok: true, data: null })),
+      rm({ name: 'JAVA_HOME' }).then((r) => expect(r).toEqual({ ok: true, data: null })),
+    ]).then(() => undefined);
   });
 
   it('★ F1 契约签名:installAdopt(tool,dir) / installForget(tool,version) 单参 DTO(编译期守卫)', () => {

@@ -1,16 +1,18 @@
 <script setup lang="ts">
 /**
  * 设置页(产品 §4.6):DevRoot / 镜像源优先级(上移下移排序,MVP 等价拖拽)/ 网络(代理+并发)/
- * 缓存目录 + [清理缓存] / 关于。数据 api$.settingsGet+catalogList;写全部走 settings:set(§8 判别联合,main 侧清洗)。
+ * 缓存目录 + [清理缓存] / ★F3 系统环境变量开关(默认关,开启需二次确认)/ 关于。
+ * 数据 api$.settingsGet+catalogList;写全部走 settings:set(§8 判别联合,main 侧清洗)。
  */
 import { computed, onMounted, ref } from 'vue';
 import {
-  NButton, NSpace, NInput, NInputNumber, NCard, NSelect, NPopconfirm, NAlert, NTag, useMessage,
+  NButton, NSpace, NInput, NInputNumber, NCard, NSelect, NPopconfirm, NAlert, NTag, NSwitch, useMessage, useDialog,
 } from 'naive-ui';
 import { api$, DevkitError } from '../api';
 import type { SettingsView, ToolCardView } from '../../../shared/ipc';
 
 const msg = useMessage();
+const dialog = useDialog();
 const settings = ref<SettingsView | null>(null);
 const tools = ref<ToolCardView[]>([]);
 const devRootDraft = ref('');
@@ -84,6 +86,24 @@ async function applyCustomPrefix(): Promise<void> {
   await patch('prefix', { sourcePrefixes: { ...(settings.value?.sourcePrefixes ?? {}), ghproxy: v } });
 }
 
+// —— ★F3 系统环境变量写开关:默认关;开启走二次确认(产品文档 §3.1"动系统级必须显式二次确认")
+async function toggleSystem(v: boolean): Promise<void> {
+  if (!v) {
+    await patch('allowSystem', { allowSystemEnv: false });
+    msg.success('已关闭系统环境变量写入');
+    return;
+  }
+  dialog.warning({
+    title: '开启系统环境变量写入?',
+    content: '开启后,「环境」页可以新增/修改/删除本机【系统级】(注册表 HKLM)环境变量,例如 JAVA_HOME、MAVEN_HOME。\n\n· Windows 内置变量(Path、SystemRoot、TEMP 等)与系统 Path 不在允许范围,始终只读;\n· 每次写入前自动存快照,可在环境页/历史页回滚;\n· 真正写入需要以【管理员身份】运行 DevKit。',
+    positiveText: '我明白,开启',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      void patch('allowSystem', { allowSystemEnv: true });
+    },
+  });
+}
+
 // —— 缓存 / 关于
 const mb = (n: number): string => (n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 async function clearCache(): Promise<void> {
@@ -151,6 +171,20 @@ onMounted(load);</script>
         <span class="sec-title" style="margin: 0">下载并发</span>
         <n-input-number v-model:value="concDraft" size="small" :min="1" :max="6" style="width: 110px" />
         <n-button size="small" :loading="saving['conc']" @click="patch('conc', { concurrency: concDraft ?? 2 })">保存</n-button>
+      </n-space>
+    </n-card>
+
+    <n-card title="系统环境变量(高级,默认关闭)" size="small" style="margin-bottom: 16px">
+      <n-space align="center" justify="space-between" :wrap="false">
+        <div style="font-size: 13px; max-width: 520px">
+          打开后可在「环境」页新增 / 修改 / 删除 <b>系统级(HKLM)</b> 变量(如 JAVA_HOME、MAVEN_HOME)。
+          <b>Windows 内置变量与系统 Path 始终只读</b>;每次写入前自动快照,可回滚;写入需要<b>管理员权限</b>。
+        </div>
+        <n-switch
+          :value="settings?.allowSystemEnv ?? false"
+          :loading="saving['allowSystem']"
+          @update:value="(v: boolean) => toggleSystem(v)"
+        />
       </n-space>
     </n-card>
 

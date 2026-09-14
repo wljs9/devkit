@@ -19,7 +19,7 @@ function withProviders(comp: Component): Component {
   });
 }
 
-async function mountView(comp: Component, bridge: Partial<DevkitApi>): Promise<{ text(): string; unmount(): void }> {
+async function mountView(comp: Component, bridge: Partial<DevkitApi>) {
   (window as unknown as { devkit: DevkitApi }).devkit = {
     onDownloadProgress: vi.fn(() => () => undefined),
     ...bridge,
@@ -44,6 +44,8 @@ describe('Environment.vue(§4.4)', () => {
           rows: [
             { raw: 'C:\\ghost\\bin', expanded: 'C:\\ghost\\bin', scope: 'user', missing: true, duplicated: false, managed: false },
             { raw: 'C:\\Windows\\system32', expanded: 'C:\\Windows\\system32', scope: 'system', missing: false, duplicated: true, managed: false },
+            // ★F2:本工具受管条目也在检测表里(打「受管」标签,不可勾删)
+            { raw: 'D:\\dev\\current\\node', expanded: 'D:\\dev\\current\\node', scope: 'user', missing: false, duplicated: false, managed: true },
           ],
           systemReadable: true,
           summary: { total: 23, missing: 2, duplicates: 1 },
@@ -66,6 +68,33 @@ describe('Environment.vue(§4.4)', () => {
     expect(text).toContain('系统(只读)');
     expect(text).toContain('恢复此状态');
     expect(text).toContain('重新接入环境'); // 有 absent 项 → 修复入口
+    w.unmount();
+  });
+
+  it('★F2 受管条目并入检测表:同表展示 + 「受管」标签 + 勾选框禁用(防误删自己的入口)', async () => {
+    const { default: View } = await import('../../src/renderer/src/views/Environment.vue');
+    const w = await mountView(View, {
+      envAudit: vi.fn(() =>
+        ok({
+          devRoot: 'D:\\dev',
+          managed: [{ label: 'D:\\dev\\current\\node', kind: 'path', value: 'D:\\dev\\current\\node', present: true, targetOk: true }],
+          rows: [
+            { raw: 'C:\\ghost\\bin', expanded: 'C:\\ghost\\bin', scope: 'user', missing: true, duplicated: false, managed: false },
+            { raw: 'D:\\dev\\current\\node', expanded: 'D:\\dev\\current\\node', scope: 'user', missing: false, duplicated: false, managed: true },
+          ],
+          systemReadable: true,
+          summary: { total: 2, missing: 1, duplicates: 0 },
+        } satisfies EnvAuditView),
+      ),
+      envState: vi.fn(() => ok({ devRoot: 'D:\\dev', wired: true, entries: [], backups: [] })),
+    });
+    const text = w.text();
+    expect(text).toContain('PATH 条目体检(用户 + 系统)'); // 原「外部条目区」已升格为全量表
+    expect(text).toContain('D:\\dev\\current\\node'); // 受管条目出现在检测列表里
+    expect(text).toContain('受管');
+    // 受管行的勾选框必须禁用(只有非受管的用户级项可选)
+    expect(w.findAll('.n-checkbox').length).toBe(2);
+    expect(w.findAll('.n-checkbox--disabled').length).toBe(1);
     w.unmount();
   });
 });

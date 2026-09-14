@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
  * 环境页(产品 §4.4):受管区(固定 3 条 + JAVA_HOME,✓正常/⚠失效/✗未接入 —— 决策 A 的暴露面)、
- * 外部条目区(用户可勾删,系统只读;默认不勾选任何项,§3 红线 3)、状态备份区([恢复此状态]→env:restore)、
- * 底部 [重新体检] + 汇总。数据 = env:audit(含 rows)+ env:state(备份),全部判定复用 core 原语(shell 装配),组件只展示。
+ * PATH 条目体检表(用户 + 系统 + ★F2 并入的本工具受管条目;仅用户级非受管项可勾删,默认不勾选,§3 红线 3)、
+ * 状态备份区([恢复此状态]→env:restore)、底部 [重新体检] + 汇总。
+ * 数据 = env:audit(含 rows)+ env:state(备份),全部判定复用 core 原语(shell 装配),组件只展示。
  */
 import { computed, onMounted, ref } from 'vue';
 import {
   NButton, NSpace, NAlert, NTag, NCheckbox, NPopconfirm, NSpin, NEmpty, useMessage, useDialog,
 } from 'naive-ui';
 import { api$, DevkitError } from '../api';
-import type { EnvAuditView, EnvStateView, ManagedEntryView } from '../../../shared/ipc';
+import type { EnvAuditView, EnvPathRowView, EnvStateView, ManagedEntryView } from '../../../shared/ipc';
 
 const msg = useMessage();
 const dialog = useDialog();
@@ -77,10 +78,16 @@ async function reconnect(): Promise<void> {
   }
 }
 
-// —— 外部区:非受管行;系统项只读(写只碰 HKCU,红线 §3.1)
-const externals = computed(() => (audit.value?.rows ?? []).filter((r) => !r.managed));
-const selectedRows = computed(() => externals.value.filter((r) => selected.value.has(r.raw) && r.scope === 'user'));
-const selectable = (raw: string): boolean => externals.value.find((r) => r.raw === raw)?.scope === 'user';
+// —— PATH 检测表(§4.4 外部条目区 → ★F2 升格为全量表:本工具受管条目也入列并打「受管」标签)
+//    可勾删的只有"用户级 ∧ 非受管"两类;系统项只读(写只碰 HKCU,红线 §3.1),受管项由向导维护。
+const rows = computed(() => audit.value?.rows ?? []);
+const selectable = (r: EnvPathRowView): boolean => r.scope === 'user' && !r.managed;
+const selectedRows = computed(() => rows.value.filter((r) => selected.value.has(r.raw) && selectable(r)));
+const boxTitle = (r: EnvPathRowView): string => {
+  if (r.managed) return '本工具受管条目:由向导「接入环境」维护,不在此清理(防误删自己的入口)';
+  if (r.scope === 'system') return '系统级(HKLM)条目:本工具只读,不代删 —— 请到 设置→系统环境变量 处理';
+  return '勾选后可清理(需确认)';
+};
 
 function toggle(raw: string, on: boolean): void {
   const next = new Set(selected.value);
@@ -156,9 +163,9 @@ onMounted(reload);
         </tbody>
       </table>
 
-      <!-- 外部条目区(§4.4):仅用户项可勾删;系统项只读 -->
+      <!-- ★F2 PATH 检测表:全量(user + system + 本工具受管);仅「用户级 ∧ 非受管」可勾删 -->
       <div class="sec-title" style="margin-top: 26px">
-        外部 PATH 条目(非本工具创建)
+        PATH 条目体检(用户 + 系统)
         <n-popconfirm v-if="selectedRows.length > 0" @positive-click="prune">
           <template #trigger>
             <n-button size="tiny" type="error" :loading="pruning">清理所选({{ selectedRows.length }})</n-button>
@@ -168,21 +175,24 @@ onMounted(reload);
           <span v-if="selectedRows.length > 8">…等 {{ selectedRows.length }} 条</span>
         </n-popconfirm>
       </div>
-      <table v-if="externals.length > 0" class="env-table">
+      <table v-if="rows.length > 0" class="env-table">
         <thead>
           <tr><th style="width: 34px"></th><th>条目</th><th>区</th><th>状态</th></tr>
         </thead>
         <tbody>
-          <tr v-for="r in externals" :key="r.scope + '|' + r.raw" :class="{ bad: r.missing }">
+          <tr v-for="r in rows" :key="r.scope + '|' + r.raw" :class="{ bad: r.missing }">
             <td>
               <n-checkbox
                 :checked="selected.has(r.raw)"
-                :disabled="r.scope !== 'user'"
-                :title="r.scope === 'system' ? '系统级(HKLM)条目:本工具只读,不代删 —— 请到 设置→环境变量 手动处理' : '勾选后可清理(需确认)'"
+                :disabled="!selectable(r)"
+                :title="boxTitle(r)"
                 @update:checked="(v: boolean) => toggle(r.raw, v)"
               />
             </td>
-            <td class="mono" :title="r.expanded === r.raw ? r.raw : r.raw + ' → ' + r.expanded">{{ r.expanded }}</td>
+            <td class="mono" :title="r.expanded === r.raw ? r.raw : r.raw + ' → ' + r.expanded">
+              {{ r.expanded }}
+              <n-tag v-if="r.managed" size="tiny" type="info" :bordered="false" style="margin-left: 6px">受管</n-tag>
+            </td>
             <td><n-tag size="tiny" :bordered="false">{{ r.scope === 'user' ? '用户' : '系统(只读)' }}</n-tag></td>
             <td>
               <span v-if="r.missing" style="color: #d03050">⚠ 指向不存在的目录</span>
@@ -192,7 +202,7 @@ onMounted(reload);
           </tr>
         </tbody>
       </table>
-      <n-empty v-else description="无外部条目" style="margin: 18px 0" />
+      <n-empty v-else description="PATH 为空" style="margin: 18px 0" />
 
       <!-- 状态备份区(§4.4) -->
       <div class="sec-title" style="margin-top: 26px">状态备份(每次写入前的全量快照)</div>

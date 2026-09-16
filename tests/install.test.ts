@@ -397,4 +397,21 @@ describe('F4 校验与布局泛化', () => {
     if (!bad.success) throw new Error(bad.error.message);
     await expect(install(bad.data, verOf(V2), {}, ctx(bad.data))).rejects.toThrowError(/缺 bin\\ 目录/);
   });
+
+  it('空 rootDir(flat 铺根):Python embed 形态 —— 多文件直接在 zip 根,整树即安装根', async () => {
+    const buf = makeZip([
+      { name: `${PKG}.exe`, data: Buffer.from('py-exe') },
+      { name: `python${V1.split('.').slice(0, 2).join('')}.dll`, data: Buffer.from('dll') },
+      { name: 'Lib/os.py', data: Buffer.from('os') },
+    ]);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const entry = CatalogEntrySchema.safeParse({ ...mkEntry(srv.url), rootDir: '', layout: 'binAtRoot' });
+    if (!entry.success) throw new Error(entry.error.message);
+    sidecars[`${V1}`] = createHash('sha512').update(buf).digest('hex');
+    await install(entry.data, verOf(V1), {}, ctx(entry.data));
+    const real = toolVersionDir(devRoot, PKG, V1);
+    expect(fs.existsSync(path.join(real, `${PKG}.exe`))).toBe(true);
+    expect(fs.existsSync(path.join(real, 'Lib', 'os.py'))).toBe(true);
+  });
 });

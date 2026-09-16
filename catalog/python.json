@@ -5,6 +5,7 @@
   "dirRegex": "^(?<ver>3\\.\\d+\\.\\d+)/$",
   "fileRegex": "^python-(?<ver>\\d+\\.\\d+\\.\\d+)-embed-amd64\\.zip$",
   "maxVersions": 4,
+  "versionPolicy": { "exclude": ["3.15.0"] },
   "sources": [
     {
       "id": "huawei",
@@ -23,7 +24,12 @@
   "checksum": {
     "kind": "pinnedHash",
     "algo": "sha256",
-    "pinned": {},
+    "pinned": {
+      "3.14.7": { "algo": "sha256", "hex": "d297e5ff019966817ad8502465176139f2d3d840fa4ed84b13bed399a6ab1f15" },
+      "3.14.6": { "algo": "sha256", "hex": "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c" },
+      "3.14.5": { "algo": "sha256", "hex": "ba6bd811c4eedb19195cf275770ef127e893d63701e24152606e2cb76f6d876a" },
+      "3.14.4": { "algo": "sha256", "hex": "cda80a9b1e75c0f1b4f9872ca1b417f0d19bce32facc811aea9180e70fad5fb9" }
+    },
     "note": "★ F4 实测:python.org 只发 .asc 签名、不发哈希文件(官方下载页没有,镜像亦无 sidecar)→ walked pin。全部写走清单内置表,发新版例行更新;表外版本拒装"
   },
   "rootDir": "",

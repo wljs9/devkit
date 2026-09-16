@@ -2,7 +2,7 @@
   "id": "dbeaver",
   "displayName": "DBeaver Community",
   "listKind": "dirIndex",
-  "dirRegex": "^(?<ver>\\d+\\.\\d+\\.\\d+)/$",
+  "dirRegex": "(?<ver>\\d+\\.\\d+\\.\\d+)/$",
   "fileRegex": "^dbeaver-ce-(?<ver>\\d+\\.\\d+\\.\\d+)-windows-x86_64\\.zip$",
   "maxVersions": 6,
   "sources": [
@@ -21,7 +21,9 @@
   "checksum": {
     "kind": "pinnedHash",
     "algo": "sha256",
-    "pinned": {},
+    "pinned": {
+      "26.2.0": { "algo": "sha256", "hex": "a2429b50e3e5ab0b5aeee4abea5bbbdae1968173996488fd592f43781058baca" }
+    },
     "note": "★ F4 实测:GitHub Release 不发布哈希资产,官方 dbeaver.io 亦无 sidecar → walked pin。哈希随新版本例行更新;表外版本拒装"
   },
   "rootDir": "dbeaver",

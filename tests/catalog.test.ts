@@ -38,6 +38,18 @@ describe('catalog/ 定稿文件(§6)', () => {
       'mirrors.tuna.tsinghua.edu.cn',
     ]);
   });
+  it('★ F4 定稿门禁:pinnedHash 校验的工具,pinned 表非空且哈希为 64hex(F4 六工具真测哈希已回填)', () => {
+    const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
+    const pinnedTools = loadCatalogDir(dir).filter((e) => e.checksum.kind === 'pinnedHash');
+    expect(pinnedTools.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'python', 'vscode']);
+    for (const e of pinnedTools) {
+      expect(Object.keys(e.checksum.pinned ?? {}).length, `${e.id} 的 pinned 表为空(需先跑 scripts/f4-e2e.mts --pin 回填真哈希)`).toBeGreaterThan(0);
+      for (const [ver, p] of Object.entries(e.checksum.pinned ?? {})) {
+        expect(p.hex, `${e.id} ${ver} 哈希应为 64 位 hex`).toMatch(/^[0-9a-f]{64}$/);
+        expect(ver.length, `${e.id} 版本键异常:${ver}`).toBeGreaterThan(0);
+      }
+    }
+  });
   it('★ F1 定稿门禁:三份清单都声明了 adopt(接管已有安装),且探测链非空、标记非空', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
     for (const e of loadCatalogDir(dir)) {
@@ -101,6 +113,12 @@ describe('dirIndex 解析', () => {
     expect(vs[1]!.dir).toBe('22.20.0');
     expect(vs[1]!.asset).toBe('node-v22.20.0-win-x64.zip');
     expect(vs[1]!.preferredSourceId).toBe('huawei');
+  });
+  it('versionPolicy.exclude:显式排除占位版(python 3.15 被 α 占用场景)', async () => {
+    const { fn } = await stubResponses({ 'https://mirrors.invalid/nodejs/': NODE_HTML });
+    const e = nodeCatalog({ versionPolicy: { exclude: ['24.1.0'] } });
+    const vs = await listVersions(e, { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['22.20.0', '9.6.0']);
   });
   it('首选源不可达 → 自动换下一个带 listUrl 的源', async () => {
     const { fn } = await stubResponses({ 'https://nodejs.invalid/dist/': NODE_HTML }); // huawei 故意缺席(418)

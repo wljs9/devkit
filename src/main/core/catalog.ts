@@ -119,7 +119,8 @@ export const CatalogEntrySchema = z
     listScan: ListScanSchema.optional(),
     dirRegex: z.string().optional(),
     fileRegex: z.string(),
-    versionPolicy: z.object({ preferEvenMajorLts: z.boolean().optional(), excludeRc: z.boolean().optional() }).optional(),
+    /** ★ F4:显式排除的版本串(如 python.org 的 3.15.0/ 目录被 α 占用、无正式 embed 包) */
+    versionPolicy: z.object({ preferEvenMajorLts: z.boolean().optional(), excludeRc: z.boolean().optional(), exclude: z.array(z.string()).optional() }).optional(),
     /** ★ F4:版本串按原文保留(非 semver,如 git tag "2.55.0.windows.5"),排序用自然序 */
     rawVersion: z.boolean().optional(),
     /** ★ F4:发现结果只保留最新 N 个,防几百版本刷商店页(VS Code/JetBrains/Git) */
@@ -334,8 +335,10 @@ function parseDirIndex(entry: CatalogEntry, listUrl: string, html: string): Disc
     const version = normalVersion(raw, entry.rawVersion);
     if (!version) continue;
     if (entry.versionPolicy?.excludeRc && /rc|pre|beta|alpha/i.test(raw)) continue;
+    if (entry.versionPolicy?.exclude?.includes(version)) continue;
     const extra: Record<string, string> = { ...(m.groups ?? {}) } as Record<string, string>;
-    names.push({ version, dir: raw, href: h.replace(/\/+$/, ''), extra });
+    // href = 源目录下的相对目录名(取末段):USTC github-release 的 href 是绝对路径,node 镜像是相对路径,统一成目录名
+    names.push({ version, dir: raw, href: h.split('/').filter(Boolean).at(-1) ?? '', extra });
   }
   names.sort((a, b) => (entry.rawVersion ? naturalCompare(b.version, a.version) : semver.rcompare(a.version, b.version)));
   const assetTpl = entry.sources[0]!.fileUrl.slice(entry.sources[0]!.fileUrl.lastIndexOf('/') + 1);

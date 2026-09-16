@@ -2,7 +2,7 @@
   "id": "git",
   "displayName": "Git (MinGit)",
   "listKind": "dirIndex",
-  "dirRegex": "^Git(?:%20| )for(?:%20| )Windows(?:%20| )v(?<ver>\\d+\\.\\d+\\.\\d+\\.windows\\.\\d+)/$",
+  "dirRegex": "Git(?:%20| )for(?:%20| )Windows(?:%20| )v(?<ver>\\d+\\.\\d+\\.\\d+\\.windows\\.\\d+)/$",
   "fileRegex": "^MinGit-(?<ver>[\\d.]+)-64-bit\\.zip$",
   "rawVersion": true,
   "maxVersions": 5,
@@ -24,10 +24,12 @@
   "checksum": {
     "kind": "pinnedHash",
     "algo": "sha256",
-    "pinned": {},
+    "pinned": {
+      "2.55.0.windows.5": { "algo": "sha256", "hex": "56d7b226b7693196cfc71fef26568f536c4a021ab6c37ff2db4287bed908e96e" }
+    },
     "note": "★ F4 实测:git-for-windows Release 不发布哈希资产(USTC 资产清单无 sidecar,git-for-windows 仓库亦然)→ walked pin。哈希由仓库维护,发新版例行更新;表外版本拒装"
   },
-  "rootDir": "mingit-{gitver}-64-bit",
+  "rootDir": "",
   "layout": "binSubdir",
   "binName": "cmd",
   "adopt": {

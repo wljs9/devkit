@@ -9,7 +9,6 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
-import extractZip from 'extract-zip';
 import { CoreError } from './errors';
 import { Downloader, type DownloadProgress, type HashAlgo } from './download';
 import { assertDeletableRealDir, ensureJunction, inspectLink, removeJunction, switchJunction } from './junction';
@@ -115,6 +114,34 @@ function defaultFetchText(url: string): Promise<string> {
   });
 }
 
+/** PowerShell 单引号转义(§7.1 内涵:参数不走裸拼接,防注入;DevRoot 可能含空格/引号) */
+function psQuote(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/**
+ * ★ F4(2026-09-16):解压改用 PowerShell Expand-Archive —— extract-zip/yauzl 的 inflate 读流
+ * 对部分真实 zip 静默截断(python.org embed 的 python.exe 条目只出 95,994/106,208 字节后
+ * 无 end/error 卡死,Expand-Archive 解同一文件 106,208 字节完整)。§7.6 本就约定"解压一律走
+ * Expand-Archive"(fetch-electron 已用它);改后安装链路与脚本口径一致。产物先复制为
+ * bundle.zip(Expand-Archive 只认 .zip 扩展名)再展开进临时目录,删 Bundle 后按 rootDir 归一化。
+ */
+async function expandZip(tempDir: string, partPath: string): Promise<void> {
+  const bundle = path.join(tempDir, 'bundle.zip');
+  fs.copyFileSync(partPath, bundle);
+  try {
+    await promisify(cpExecFile)(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath ${psQuote(bundle)} -DestinationPath ${psQuote(tempDir)} -Force`],
+      { windowsHide: true, timeout: 900_000, maxBuffer: 1024 * 1024 },
+    );
+  } catch (e) {
+    throw new CoreError('extract-failed', `解压失败(Expand-Archive):${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+  } finally {
+    fs.rmSync(bundle, { force: true });
+  }
+}
+
 function varsOf(entry: CatalogEntry, ver: DiscoveredVersion, sourceId: string): Record<string, string | number> {
   void sourceId;
   const v: Record<string, string | number> = {
@@ -160,10 +187,10 @@ export async function install(
     const fileName = url.slice(url.lastIndexOf('/') + 1);
     const out = await ctx.downloader.start({ id: `${entry.id}-${ver.version}`, url, fileName, expected }, opts.onProgress);
 
-    // ② 解压到 cache 下临时区(与 tools 同盘,保证 ③ rename 原子)
+    // ② 解压到 cache 下临时区(与 tools 同盘,保证 ③ rename 原子)—— PowerShell Expand-Archive(★F4)
     tempDir = extractTempDir(ctx.devRoot, randomUUID().slice(0, 8));
     fs.mkdirSync(tempDir, { recursive: true });
-    await extractZip(out.partPath, { dir: tempDir });
+    await expandZip(tempDir, out.partPath);
 
     // ③ 按 rootDir 归一化:空 rootDir=文件直接铺在 zip 根(Python embed);期望顶层目录存在则用之;
     //    否则唯一顶层拍平(§7.5,镜像/打包差异容错,JetBrains zip 单顶层目录依赖此路径)

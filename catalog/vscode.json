@@ -15,19 +15,22 @@
   "checksum": {
     "kind": "pinnedHash",
     "algo": "sha256",
-    "pinned": {},
+    "pinned": {
+      "1.138.0": { "algo": "sha256", "hex": "c0a9f12a0d8962fa4cda1959eecd5fdd3f82de9715ad4dadd5601856bb60fd21" }
+    },
     "note": "★ F4 实测:官方 /api/versions、/api/update 端点均 404(不公开 per-version 哈希);GitHub Release 无 SHA256SUMS 资产 → walked pin。哈希随最新版发布例行更新"
   },
-  "rootDir": "VSCode-win32-x64",
+  "rootDir": "",
   "layout": "binAtRoot",
   "adopt": {
     "markers": ["Code.exe"],
-    "exec": "Code.exe",
+    "exec": "bin\\code.cmd",
     "binDir": ".",
     "version": [
-      { "kind": "releaseFile", "file": "product.json", "regex": "\"version\"\\s*:\\s*\"([0-9]+\\.[0-9]+\\.[0-9]+)\"", "note": "Code.exe 同目录 product.json(官方发行版必有)" }
+      { "kind": "exec", "exe": "bin\\code.cmd", "args": ["--version"], "regex": "([0-9]+\\.[0-9]+\\.[0-9]+)", "note": "bin\\code.cmd --version 第一行为版本(F4 实测 1.138.0)" },
+      { "kind": "dirName", "regex": "^(\\d+\\.\\d+\\.\\d+)$", "note": "DevRoot 安装目录名即版本号兜底" }
     ],
-    "note": "★ F1 接管既有 VS Code(如 C:\\Program Files\\Microsoft VS Code、便携版解压目录)"
+    "note": "★ F1 接管既有 VS Code(如 C:\\Program Files\\Microsoft VS Code、便携解压目录)。新 CDN zip 为扁平根 + {commit}/ 承载运行时的结构(实测 Code.exe 依赖 {commit} 目录),rootDir 走 flat"
   },
   "m0": {
     "verifiedAt": "2026-09-16",

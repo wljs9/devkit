@@ -1,6 +1,6 @@
 /**
  * 解压、登记、卸载(技术手册 §7.5 / §7.3 卸载红线 / 产品文档 §4.1~4.3)。
- * 链路:下载(含校验)→ extract-zip 到 cache 临时区 → 按 rootDir 归一化 → rename 原子进 tools →
+ * 链路:下载(含校验)→ Expand-Archive 到 cache 临时区 → 按 rootDir 归一化 → rename 原子进 tools →
  *       登记(installs)→ 该工具首个版本自动建链 current → history 记账。
  * 失败清理临时目录,登记表不写入(§7.5)。
  */

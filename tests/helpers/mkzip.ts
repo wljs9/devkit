@@ -1,4 +1,4 @@
-/** 测试夹具:构造 store-only(无压缩)合法 zip,喂给 extract-zip。 */
+/** 测试夹具:构造 store-only(无压缩)合法 zip,喂给安装链路(Expand-Archive)解压。 */
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);

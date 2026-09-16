@@ -6,3 +6,6 @@ coverage/
 *.log
 *.tsbuildinfo
 .devkit-tmp/
+
+# F4 e2e 打包产物(scripts/f4-e2e.mts 经 esbuild 输出,不入库)
+scripts/.f4-e2e.cjs

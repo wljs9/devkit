@@ -1,6 +1,6 @@
 {
   "name": "devkit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Windows 开发环境管理器:国内镜像下载 + 可携化安装 + 干净环境变量",
   "author": "DevKit",
@@ -26,7 +26,6 @@
     "env-selftest": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/env-selftest.ps1"
   },
   "dependencies": {
-    "extract-zip": "^2.0.1",
     "semver": "^7.6.3",
     "undici": "^8.10.2",
     "zod": "^3.23.8"
@@ -34,8 +33,8 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/semver": "^7.5.8",
-    "@vitejs/plugin-vue": "^6.0.0",
     "@vicons/ionicons5": "^0.13.0",
+    "@vitejs/plugin-vue": "^6.0.0",
     "@vue/test-utils": "^2.5.0",
     "electron": "^37.0.0",
     "electron-builder": "^26.0.0",

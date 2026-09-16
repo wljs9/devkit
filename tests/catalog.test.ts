@@ -12,6 +12,7 @@ import {
   getVersions,
   listVersions,
   loadCatalogDir,
+  naturalCompare,
   preferByPriority,
   renderTemplate,
   TTL_MS,
@@ -252,6 +253,130 @@ describe('applyCatalogPrefs / preferByPriority(§4.6 设置覆盖,M3)', () => {
     expect(preferByPriority(top, [srcs[1]!, srcs[0]!, srcs[2]!])).toBe('ghproxy');
     // 全 latestOnly 且非最新 → 兜底回原 preferredSourceId
     expect(preferByPriority(old, [srcs[0]!])).toBe('ghproxy');
+  });
+});
+
+/** ★ F4(2026-09-16):naturalCompare / rawVersion / aliases / maxVersions / jsonApi / latestRedirect / pinned 闸 */
+describe('F4 泛化:自然序 / rawVersion / aliases / maxVersions', () => {
+  it('naturalCompare:数字段按数值比较(非字典序),字母段按字典', () => {
+    expect(naturalCompare('2.55.0.windows.2', '2.55.0.windows.10')).toBeLessThan(0);
+    expect(naturalCompare('2.10.0', '2.9.0')).toBeGreaterThan(0);
+    expect(naturalCompare('2025.3', '2025.2.6.3')).toBeGreaterThan(0);
+    expect(naturalCompare('a2', 'a1')).toBeGreaterThan(0);
+    expect(naturalCompare('2.55.0.windows.5', '2.55.0.windows.5')).toBe(0);
+  });
+
+  const GIT_HTML = [
+    '<a href="../">up</a>',
+    '<a href="Git%20for%20Windows%20v2.55.0.windows.5/">v2.55.0.windows.5</a>',
+    '<a href="Git%20for%20Windows%20v2.47.0.windows.1/">v2.47.0.windows.1</a>',
+    '<a href="Git%20for%20Windows%20v2.39.2.windows.11/">v2.39.2.windows.11</a>',
+    '<a href="other/">other</a>',
+  ].join('\n');
+
+  function gitCatalog() {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'git', displayName: 'Git', listKind: 'dirIndex', rawVersion: true, maxVersions: 2,
+      dirRegex: '^Git(?:%20| )for(?:%20| )Windows(?:%20| )v(?<ver>\\d+\\.\\d+\\.\\d+\\.windows\\.\\d+)/$',
+      fileRegex: '^MinGit-(?<ver>[\\d.]+)-64-bit\\.zip$',
+      aliases: [{ name: 'gitver', from: '.windows.', to: '.' }],
+      sources: [{ id: 'ustc', listUrl: 'https://ustc.git.invalid/', fileUrl: 'https://ustc.git.invalid/{href}/MinGit-{gitver}-64-bit.zip' }],
+      checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: {} },
+      rootDir: 'mingit-{gitver}-64-bit', layout: 'binSubdir', binName: 'cmd',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('rawVersion 原文保留 + 自然降序(windows.11 > windows.2)+ maxVersions 截断 + href/别名进资产名', async () => {
+    const { fn } = await stubResponses({ 'https://ustc.git.invalid/': GIT_HTML });
+    const vs = await listVersions(gitCatalog(), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['2.55.0.windows.5', '2.47.0.windows.1']); // 只留最新 2 个,原文非 semver
+    expect(vs[0]!.asset).toBe('MinGit-2.55.0.5-64-bit.zip'); // 别名 .windows. → .
+    expect(vs[0]!.extra?.href).toBe('Git%20for%20Windows%20v2.55.0.windows.5');
+  });
+});
+
+describe('F4 jsonApi / latestRedirect', () => {
+  function jetbrainsCatalog(code: string) {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'idea', displayName: 'IntelliJ IDEA', listKind: 'jsonApi', listApi: `https://api.jb.invalid/releases?code=${code}`,
+      listScan: {
+        shape: 'map', root: 'IIC', versionPath: 'version',
+        assetPath: 'downloads.windowsZip.link', checksumPath: 'downloads.windowsZip.checksumLink', sizePath: 'downloads.windowsZip.size',
+      },
+      rawVersion: true, maxVersions: 5,
+      fileRegex: '^ideaIC-(?<ver>[\\w.]+)\\.win\\.zip$',
+      sources: [{ id: 'official', fileUrl: '{asset}' }],
+      checksum: { kind: 'discoveredSidecar', algo: 'sha256' },
+      rootDir: 'idea-{ver}', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('jsonApi map(JetBrains):点路径取版本/资产/校验/体积;无 windowsZip 跳过;raw 自然降序', async () => {
+    const body = JSON.stringify({
+      IIC: [
+        { version: '2025.2.6.3', build: '252', downloads: { windowsZip: { link: 'https://dl.jb.invalid/ideaIC-2025.2.6.3.win.zip', checksumLink: 'https://dl.jb.invalid/ideaIC-2025.2.6.3.win.zip.sha256', size: 123 } } },
+        { version: '2025.3', build: '253', downloads: { windowsZip: { link: 'https://dl.jb.invalid/ideaIC-2025.3.win.zip', checksumLink: 'https://dl.jb.invalid/ideaIC-2025.3.win.zip.sha256', size: 456 } } },
+        { version: '2024.1', downloads: { windows: { link: 'https://dl.jb.invalid/x.exe' } } }, // 无 windowsZip → 跳过
+      ],
+    });
+    const { fn } = await stubResponses({ 'https://api.jb.invalid/releases?code=IIC': body });
+    const vs = await listVersions(jetbrainsCatalog('IIC'), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['2025.3', '2025.2.6.3']);
+    expect(vs[0]!.asset).toBe('https://dl.jb.invalid/ideaIC-2025.3.win.zip');
+    expect(vs[0]!.checksumUrl).toBe('https://dl.jb.invalid/ideaIC-2025.3.win.zip.sha256');
+    expect(vs[0]!.size).toBe(456);
+  });
+
+  it('jsonApi flat:平数组版本串,自然降序', async () => {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'vsx', displayName: 'VS', listKind: 'jsonApi', listApi: 'https://api.flat.invalid/vs', listScan: { shape: 'flat' },
+      fileRegex: '^code-stable-x64-(?<ver>[\\d.]+)\\.zip$',
+      sources: [{ id: 'official', fileUrl: 'https://cdn.invalid/{asset}' }],
+      checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: {} },
+      rootDir: 'VSCode-win32-x64', layout: 'binAtRoot',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const { fn } = await stubResponses({ 'https://api.flat.invalid/vs': JSON.stringify(['1.96.2', '9.5.3', 'abc']) });
+    const vs = await listVersions(r.data, { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['9.5.3', '1.96.2']);
+  });
+
+  it('latestRedirect:跟转发,从终URL文件名提取版本;源不可达 → catalog-fetch', async () => {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'vscode', displayName: 'VS Code', listKind: 'latestRedirect',
+      fileRegex: '^VSCode-win32-x64-(?<ver>\\d+\\.\\d+\\.\\d+)\\.zip$',
+      sources: [{ id: 'official', listUrl: 'https://update.vscode.invalid/latest/stable', fileUrl: 'https://update.vscode.invalid/latest/stable' }],
+      checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: {} },
+      rootDir: 'VSCode-win32-x64', layout: 'binAtRoot',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const fn = (async () => {
+      const res: Response = { ok: true, status: 200, url: 'https://cdn.vscode.invalid/download/stable/abc123/VSCode-win32-x64-1.138.0.zip' } as unknown as Response;
+      return res;
+    }) as unknown as typeof fetch;
+    const vs = await listVersions(r.data, { fetchImpl: fn });
+    expect(vs).toHaveLength(1);
+    expect(vs[0]!.version).toBe('1.138.0');
+    expect(vs[0]!.asset).toBe('VSCode-win32-x64-1.138.0.zip');
+    // 终URL不是目标文件名 → 无法识别版本
+    const badFn = (async () => ({ ok: true, status: 200, url: 'https://cdn.vscode.invalid/error-page' })) as unknown as typeof fetch;
+    await expect(listVersions(r.data, { fetchImpl: badFn })).rejects.toThrowError(/无法识别版本/);
+  });
+});
+
+describe('F4 schema 守门', () => {
+  it('jsonApi 缺 listScan / latestRedirect 缺 listUrl / pinned 哈希非法 / listScan 形状未知 → 拒绝;合法组合通过', () => {
+    const e = nodeCatalog();
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'jsonApi', listApi: 'https://x/y', listScan: undefined, dirRegex: undefined }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'latestRedirect', dirRegex: undefined, sources: [{ id: 'o', fileUrl: 'x' }] }).success).toBe(false); // listUrl 缺失
+    expect(CatalogEntrySchema.safeParse({ ...e, listScan: { shape: 'nope' } }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...e, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: { '1.0.0': { algo: 'sha256', hex: 'zzz' } } } }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...e, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: { '1.0.0': { algo: 'sha256', hex: 'a'.repeat(64) } } } }).success).toBe(true);
+    expect(CatalogEntrySchema.safeParse({ ...e, layout: 'binSubdir', binName: 'cmd' }).success).toBe(true);
   });
 });
 

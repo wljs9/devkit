@@ -340,3 +340,61 @@ describe('S2 resolveOpenableInstallDir', () => {
     expect(() => resolveOpenableInstallDir(devRoot, [recOf('f', file)], 'f')).toThrowError(/不是目录/);
   });
 });
+
+/** ★ F4(2026-09-16):pinnedHash / discoveredSidecar / binName 布局 */
+describe('F4 校验与布局泛化', () => {
+  it('pinnedHash:表内命中 → 校验安装;表外版本 → checksum-unpinned 拒装(§3.5 宁可不装)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const good = createHash('sha256').update(buf).digest('hex');
+    const entry = mkEntry(srv.url);
+    const pinned = CatalogEntrySchema.safeParse({ ...entry, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: { [V1]: { algo: 'sha256', hex: good } } } });
+    if (!pinned.success) throw new Error(pinned.error.message);
+    const rec = await install(pinned.data, verOf(V1), {}, ctx(pinned.data));
+    expect(rec.sha256).toBe(good);
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+
+    const missing = CatalogEntrySchema.safeParse({ ...entry, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: {} } });
+    if (!missing.success) throw new Error(missing.error.message);
+    await expect(install(missing.data, verOf(V2), {}, ctx(missing.data))).rejects.toThrowError(/校验和未收录/); // V2 不在表内且未登记
+  });
+
+  it('discoveredSidecar:版本携带的 sidecar URL 取裸哈希 → 安装;缺 URL → checksum-missing', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const good = createHash('sha512').update(buf).digest('hex');
+    const entry = CatalogEntrySchema.safeParse({ ...mkEntry(srv.url), checksum: { kind: 'discoveredSidecar', algo: 'sha512' } });
+    if (!entry.success) throw new Error(entry.error.message);
+    sidecars[`sha512/${V1}`] = good;
+    const ver = { ...verOf(V1), checksumUrl: `${srv.url}/sha512/${V1}` };
+    const rec = await install(entry.data, ver, {}, ctx(entry.data));
+    expect(rec.sha256).toBe(createHash('sha256').update(buf).digest('hex'));
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+
+    const noSidecar = CatalogEntrySchema.safeParse({ ...mkEntry(srv.url), checksum: { kind: 'discoveredSidecar', algo: 'sha512' } });
+    if (!noSidecar.success) throw new Error(noSidecar.error.message);
+    await expect(install(noSidecar.data, verOf(V2), {}, ctx(noSidecar.data))).rejects.toThrowError(/缺 sidecar URL/); // V2 未登记,先撞校验分支
+  });
+
+  it('布局 binName:binSubdir + binName=cmd 校验 cmd 子目录;默认仍校验 bin', async () => {
+    const buf = makeZip([{ name: `${PKG}-${V1}/cmd/${PKG}.exe`, data: Buffer.from('x') }]);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const entry = CatalogEntrySchema.safeParse({ ...mkEntry(srv.url), layout: 'binSubdir', binName: 'cmd' });
+    if (!entry.success) throw new Error(entry.error.message);
+    sidecars[`${V1}`] = createHash('sha512').update(buf).digest('hex');
+    await install(entry.data, verOf(V1), {}, ctx(entry.data));
+    expect(fs.existsSync(path.join(toolVersionDir(devRoot, PKG, V1), 'cmd', `${PKG}.exe`))).toBe(true);
+
+    // 反例:实际目录是 cmd\ 但声明的是默认 bin\ → 布局拒(用 V2 避开已登记)
+    const bufCmd2 = makeZip([{ name: `${PKG}-${V2}/cmd/${PKG}.exe`, data: Buffer.from('x2') }]);
+    const srv2 = await startFileServer(bufCmd2, `pkg-${V2}.zip`);
+    servers.push(srv2);
+    sidecars[`${V2}`] = createHash('sha512').update(bufCmd2).digest('hex');
+    const bad = CatalogEntrySchema.safeParse({ ...mkEntry(srv2.url), layout: 'binSubdir' });
+    if (!bad.success) throw new Error(bad.error.message);
+    await expect(install(bad.data, verOf(V2), {}, ctx(bad.data))).rejects.toThrowError(/缺 bin\\ 目录/);
+  });
+});

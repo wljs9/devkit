@@ -28,10 +28,24 @@ const SourceSchema = z
 
 const ChecksumSchema = z
   .object({
-    kind: z.enum(['shasumsFile', 'adoptiumApi', 'officialSidecar']),
+    kind: z.enum(['shasumsFile', 'adoptiumApi', 'officialSidecar', 'discoveredSidecar', 'pinnedHash']),
     algo: z.enum(['sha256', 'sha512']),
     urls: z.array(z.string()).optional(),
     lineMatch: z.string().optional(),
+    /**
+     * ★ F4(2026-09-16):pinned 固定哈希 —— 官方不发布 sidecar 的工具(Git/Python/DBeaver/VS Code),
+     * 在清单内嵌「版本 → 哈希」表(发新版时例行更新)。下载仍【永远校验】(§3.5 红线不动摇),
+     * 只是校验权威从"镜像 sidecar"换成"发货方人工核对过的固定表"。表里没有的版本 → 拒装 + 可读提示。
+     */
+    pinned: z
+      .record(
+        z.string(),
+        z.object({
+          algo: z.enum(['sha256', 'sha512']),
+          hex: z.string().regex(/^(?:[0-9a-f]{64}|[0-9a-f]{128})$/i),
+        }),
+      )
+      .optional(),
     note: z.string().optional(),
     alt: z.string().optional(),
   })
@@ -72,11 +86,24 @@ const AdoptSchema = z
 
 export type AdoptProbe = z.infer<typeof AdoptProbeSchema>;
 
+/** ★ F4 jsonApi:JSON 版本 API 的形状(点路径取值,JetBrains 键控对象 / 平数组) */
+const ListScanSchema = z
+  .object({
+    shape: z.enum(['flat', 'map']),
+    /** map 型:响应里版本数组所在点路径(JetBrains:"IIC") */
+    root: z.string().optional(),
+    versionPath: z.string().optional(),
+    assetPath: z.string().optional(),
+    checksumPath: z.string().optional(),
+    sizePath: z.string().optional(),
+  })
+  .strict();
+
 export const CatalogEntrySchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     displayName: z.string(),
-    listKind: z.enum(['dirIndex', 'adoptiumApi']),
+    listKind: z.enum(['dirIndex', 'adoptiumApi', 'jsonApi', 'latestRedirect']),
     majors: z.array(z.number().int().positive()).optional(),
     listApi: z.string().optional(),
     releaseFields: z
@@ -89,13 +116,22 @@ export const CatalogEntrySchema = z
         packageSize: z.string(),
       })
       .optional(),
+    listScan: ListScanSchema.optional(),
     dirRegex: z.string().optional(),
     fileRegex: z.string(),
     versionPolicy: z.object({ preferEvenMajorLts: z.boolean().optional(), excludeRc: z.boolean().optional() }).optional(),
+    /** ★ F4:版本串按原文保留(非 semver,如 git tag "2.55.0.windows.5"),排序用自然序 */
+    rawVersion: z.boolean().optional(),
+    /** ★ F4:发现结果只保留最新 N 个,防几百版本刷商店页(VS Code/JetBrains/Git) */
+    maxVersions: z.number().int().min(1).optional(),
+    /** ★ F4:模板别名 —— 对 {ver} 做字面量替换生成新模板变量(MinGit 资产名 "2.55.0.5" 由 "2.55.0.windows.5" 去 window 段得到) */
+    aliases: z.array(z.object({ name: z.string().regex(/^[A-Za-z_]\w*$/), from: z.string(), to: z.string() })).optional(),
     sources: z.array(SourceSchema).min(1),
     checksum: ChecksumSchema,
     rootDir: z.string(),
     layout: z.enum(['binAtRoot', 'binSubdir']),
+    /** binSubdir 布局时的子目录名(MinGit 的 git.exe 在 cmd\ 不在 bin\,默认 bin) */
+    binName: z.string().optional(),
     /** ★ F1:接管已有安装的探测规则(见 AdoptSchema);缺省 = 该工具不支持接管 */
     adopt: AdoptSchema.optional(),
     assetNamingNote: z.string().optional(),
@@ -107,6 +143,8 @@ export const CatalogEntrySchema = z
     if (e.listKind === 'dirIndex' && !e.dirRegex) ctx.addIssue({ code: 'custom', message: 'dirIndex 必须给 dirRegex' });
     if (e.listKind === 'dirIndex' && !e.sources.some((s) => s.listUrl)) ctx.addIssue({ code: 'custom', message: 'dirIndex 需至少一个带 listUrl 的源' });
     if (e.listKind === 'adoptiumApi' && (!e.listApi || !e.releaseFields || !e.majors)) ctx.addIssue({ code: 'custom', message: 'adoptiumApi 需 listApi/releaseFields/majors' });
+    if (e.listKind === 'jsonApi' && (!e.listApi || !e.listScan)) ctx.addIssue({ code: 'custom', message: 'jsonApi 需 listApi/listScan' });
+    if (e.listKind === 'latestRedirect' && !e.sources.some((s) => s.listUrl)) ctx.addIssue({ code: 'custom', message: 'latestRedirect 需 source.listUrl(=重定向地址)' });
   });
 
 export type CatalogSource = z.infer<typeof SourceSchema>;
@@ -218,7 +256,7 @@ export function preferByPriority(v: DiscoveredVersion, sources: CatalogSource[])
 
 export interface DiscoveredVersion {
   tool: string;
-  /** 规整 semver(不含 build 元数据);Temurin 附加 build/releaseName */
+  /** 规整 semver(不含 build 元数据);Temurin 附加 build/releaseName;rawVersion 工具为原文 */
   version: string;
   build?: number;
   releaseName?: string;
@@ -228,8 +266,48 @@ export interface DiscoveredVersion {
   asset: string;
   size?: number;
   checksum?: { algo: 'sha256' | 'sha512'; hex: string };
+  /** ★ F4:发现阶段携带的 sidecar 校验和 URL(JetBrains:API 的 checksumLink) */
+  checksumUrl?: string;
+  /** ★ F4:dirRegex 其余命名组(base 等)与原目录字符串,供资产名/URL 模板渲染 */
+  extra?: Record<string, string>;
   /** 首选下载源(listVersions 时按源优先级+覆盖范围初选) */
   preferredSourceId: string;
+}
+
+/** ★ F4:点路径取值({a.b.c})—— jsonApi 解析用 */
+function dotGet(o: unknown, p: string): unknown {
+  if (!p) return o;
+  return p.split('.').reduce<unknown>((acc, k) => (acc as Record<string, unknown> | undefined)?.[k], o);
+}
+
+/** ★ F4:原始版本的自然序(数字段按数值、其他按字典):"2.55.0.windows.10" > "2.55.0.windows.2" */
+export function naturalCompare(a: string, b: string): number {
+  const ta = a.split(/(\d+)/);
+  const tb = b.split(/(\d+)/);
+  for (let i = 0; i < Math.max(ta.length, tb.length); i++) {
+    const x = ta[i] ?? '';
+    const y = tb[i] ?? '';
+    if (x === y) continue;
+    const nx = Number(x);
+    const ny = Number(y);
+    if (/^\d+$/.test(x) && /^\d+$/.test(y)) return nx - ny;
+    return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/** 版本归一:rawVersion 工具保留原文(去前导 v),其余沿用 semver coerce(与旧行为一致) */
+function normalVersion(raw: string, rawVersion?: boolean): string {
+  const s = raw.trim();
+  if (rawVersion) return s.replace(/^[vV](?=\d)/, '');
+  return semver.coerce(s)?.version ?? s;
+}
+
+/** ★ F4:模板别名 —— 对 {ver} 做 from→to 字面量替换,产出命名模板变量(pure,数据驱动) */
+function aliasedVars(ver: string, aliases: NonNullable<CatalogEntry['aliases']>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const a of aliases) out[a.name] = ver.split(a.from).join(a.to);
+  return out;
 }
 
 export interface ListContext {
@@ -241,28 +319,99 @@ function hrefsOf(html: string): string[] {
   return [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
 }
 
-/** 目录页解析:listUrl → dirRegex → semver 降序;文件名按 fileRegex 模板生成 */
+/**
+ * 目录页解析:listUrl → dirRegex → 版本降序;资产名 = 首选源 fileUrl 末段模板渲染。
+ * ★ F4:支持 (a) dirRegex 多余命名组(node{v}/maven{v}/git{ver}+{href});(b) rawVersion 原始版本文本(Git tag);
+ * (c) aliases 模板别名(MinGit 资产名数字段);(d) maxVersions 截取最新 N 个。
+ */
 function parseDirIndex(entry: CatalogEntry, listUrl: string, html: string): DiscoveredVersion[] {
   const re = new RegExp(entry.dirRegex!);
-  const names: { version: string; dir: string }[] = [];
+  const names: { version: string; dir: string; href: string; extra: Record<string, string> }[] = [];
   for (const h of hrefsOf(html)) {
     const m = re.exec(h);
     if (!m?.groups?.ver) continue;
     const raw = m.groups.ver;
-    const coerced = semver.coerce(raw);
-    if (!coerced) continue;
-    names.push({ version: coerced.version, dir: raw });
+    const version = normalVersion(raw, entry.rawVersion);
+    if (!version) continue;
+    if (entry.versionPolicy?.excludeRc && /rc|pre|beta|alpha/i.test(raw)) continue;
+    const extra: Record<string, string> = { ...(m.groups ?? {}) } as Record<string, string>;
+    names.push({ version, dir: raw, href: h.replace(/\/+$/, ''), extra });
   }
-  names.sort((a, b) => semver.rcompare(a.version, b.version));
-  // 资产名 = 首选源 fileUrl 的末段模板渲染({ver} 用目录原文,如 v22.20.0 的 ver 组)
+  names.sort((a, b) => (entry.rawVersion ? naturalCompare(b.version, a.version) : semver.rcompare(a.version, b.version)));
   const assetTpl = entry.sources[0]!.fileUrl.slice(entry.sources[0]!.fileUrl.lastIndexOf('/') + 1);
-  return names.map((n) => ({
+  const capped = entry.maxVersions ? names.slice(0, entry.maxVersions) : names;
+  return capped.map((n) => ({
     tool: entry.id,
     version: n.version,
     dir: n.dir,
-    asset: renderTemplate(assetTpl, { ver: n.dir, path: `${n.dir}/` }),
+    asset: renderTemplate(assetTpl, { ...n.extra, ...aliasedVars(n.version, entry.aliases ?? []), ver: n.version, path: n.href + '/' }),
+    extra: { ...n.extra, href: n.href },
     preferredSourceId: entry.sources[0]!.id,
   }));
+}
+
+/**
+ * ★ F4:JSON 版本 API 解析(listKind jsonApi)。
+ * - flat:响应是版本串平数组(VS Code /api/releases/stable 形态,资产由 fileUrl 模板推);
+ * - map:响应是键控对象(listScan.root 指向数组,各字段走点路径)—— JetBrains 形态,
+ *   资产与校验和 URL 直接来自 API(downloads.windowsZip.link/.checksumLink),template 只留 asset 占位。
+ */
+function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
+  const scan = entry.listScan!;
+  const out: DiscoveredVersion[] = [];
+  if (scan.shape === 'flat') {
+    const arr = Array.isArray(json) ? json : [];
+    for (const item of arr) {
+      if (typeof item !== 'string' || !/^\d[\w.]*$/.test(item)) continue; // 只认"数字开头"的版本串
+      const version = normalVersion(item, true);
+      if (!version) continue;
+      out.push({ tool: entry.id, version, dir: version, asset: '', preferredSourceId: entry.sources[0]!.id });
+    }
+  } else {
+    const rootList = Array.isArray(dotGet(json, scan.root ?? '')) ? (dotGet(json, scan.root ?? '') as unknown[]) : [];
+    for (const item of rootList) {
+      const version = normalVersion(String(dotGet(item, scan.versionPath ?? '') ?? ''), entry.rawVersion ?? true);
+      const link = String(dotGet(item, scan.assetPath ?? '') ?? '');
+      if (!version || !link) continue; // 无资产的发行版条目跳过(源码包/仅 win exe 等)
+      const sizeRaw = Number(dotGet(item, scan.sizePath ?? ''));
+      out.push({
+        tool: entry.id,
+        version,
+        dir: version,
+        asset: link,
+        size: Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : undefined,
+        checksumUrl: scan.checksumPath ? String(dotGet(item, scan.checksumPath) ?? '') || undefined : undefined,
+        preferredSourceId: entry.sources[0]!.id,
+      });
+    }
+  }
+  out.sort((a, b) => naturalCompare(b.version, a.version));
+  return entry.maxVersions ? out.slice(0, entry.maxVersions) : out;
+}
+
+/**
+ * ★ F4:无索引、"只给最新"的官方重定向(标准:VS Code 的 latest 下载点)。
+ * 跟转发到终URL,从终URL文件名(含版本)提取版本 —— 单版本发现。
+ */
+async function parseLatestRedirect(entry: CatalogEntry, ctx: ListContext): Promise<DiscoveredVersion[]> {
+  const f = ctx.fetchImpl ?? fetch;
+  const src = entry.sources.find((s) => s.listUrl);
+  if (!src?.listUrl) throw new CoreError('catalog-fetch', `latestRedirect 缺 listUrl:${entry.id}`);
+  const res = await f(src.listUrl, { headers: { 'User-Agent': 'DevKit-M1/0.1' }, redirect: 'follow', signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new CoreError('catalog-fetch', `HTTP ${res.status} ${src.listUrl}`);
+  const finalName = res.url.slice(res.url.lastIndexOf('/') + 1);
+  const m = new RegExp(entry.fileRegex).exec(finalName);
+  if (!m?.groups?.ver) throw new CoreError('catalog-unreachable', `重定向终URL无法识别版本:${finalName}`);
+  const version = normalVersion(m.groups.ver, entry.rawVersion);
+  return [
+    {
+      tool: entry.id,
+      version,
+      dir: version,
+      asset: finalName,
+      preferredSourceId: src.id,
+    },
+  ];
 }
 
 /** adoptiumApi 解析:每个 major 拉列表,releaseFields 取字段 */
@@ -307,6 +456,13 @@ export async function listVersions(entry: CatalogEntry, ctx: ListContext = {}): 
     return res.text();
   };
   let versions: DiscoveredVersion[];
+  if (entry.listKind === 'latestRedirect') {
+    return parseLatestRedirect(entry, ctx);
+  }
+  if (entry.listKind === 'jsonApi') {
+    const arr = (await f(renderTemplate(entry.listApi ?? '', {}), { headers: { 'User-Agent': 'DevKit-M1/0.1' }, signal: AbortSignal.timeout(30_000) })).json();
+    return parseJsonApi(entry, await arr);
+  }
   if (entry.listKind === 'dirIndex') {
     const withList = entry.sources.find((s) => s.listUrl);
     let lastErr: unknown;

@@ -60,6 +60,32 @@ async function resolveExpectedChecksum(
     if (!ver.checksum) throw new CoreError('checksum-missing', 'Temurin 版本条目缺 API checksum(发现逻辑异常)');
     return { algo: 'sha256', hex: ver.checksum.hex };
   }
+  // ★ F4:pinned 固定哈希 —— 官方无 sidecar 的工具,权威 = 清单内置表(发版时人工核对更新)。表里没有 → 拒装(宁可不装,§3.5)
+  if (c.kind === 'pinnedHash') {
+    const p = c.pinned?.[String(ver.version)];
+    if (!p) {
+      throw new CoreError(
+        'checksum-unpinned',
+        `${entry.displayName} ${ver.version} 的校验和未收录在清单内置表(仅维护最新版本),请选商店里较新的版本,或等清单更新`,
+        { urls: [] },
+      );
+    }
+    return { algo: p.algo, hex: p.hex.toLowerCase() };
+  }
+  // ★ F4:discoveredSidecar —— 校验 URL 随发现结果携带(JetBrains API 的 checksumLink),内容为裸哈希
+  if (c.kind === 'discoveredSidecar') {
+    if (!ver.checksumUrl) throw new CoreError('checksum-missing', `${entry.id} ${ver.version} 缺 sidecar URL(发现逻辑异常)`);
+    const fetchText = ctx.fetchText ?? defaultFetchText;
+    let txt: string;
+    try {
+      txt = await fetchText(ver.checksumUrl);
+    } catch (e) {
+      throw new CoreError('checksum-unreachable', `取不到 ${entry.id} ${ver.version} 的校验和(sidecar:${ver.checksumUrl})`, { cause: String(e) });
+    }
+    const m = txt.trim().match(new RegExp(`^[0-9a-f]{${c.algo === 'sha512' ? 128 : 64}}`, 'i'));
+    if (!m) throw new CoreError('checksum-unreachable', `sidecar 内容不是裸哈希:${ver.checksumUrl}`);
+    return { algo: c.algo, hex: m[0].toLowerCase() };
+  }
   const fetchText = ctx.fetchText ?? defaultFetchText;
   const vars = varsOf(entry, ver, sourceId);
   const urls = orderChecksumUrls((c.urls ?? []).map((u) => renderTemplate(u, vars)), downloadUrl);
@@ -91,13 +117,17 @@ function defaultFetchText(url: string): Promise<string> {
 
 function varsOf(entry: CatalogEntry, ver: DiscoveredVersion, sourceId: string): Record<string, string | number> {
   void sourceId;
-  return {
+  const v: Record<string, string | number> = {
     ver: ver.dir ?? ver.version, // dirIndex:目录原文(v22.20.0);API:version
     path: ver.dir ? `${ver.dir}/` : ver.version,
     asset: ver.asset,
     major: ver.version.split('.')[0]!,
     releaseName: ver.releaseName ?? '',
+    ...(ver.extra ?? {}), // F4:dirRegex 其余命名组 + href(原目录串),MinGit 盘位资产名靠它
+    dir: ver.extra?.href ?? ver.dir ?? ver.version,
   };
+  for (const a of entry.aliases ?? []) v[a.name] = String(v.ver).split(a.from).join(a.to); // F4 模板别名
+  return v;
 }
 
 /**
@@ -147,9 +177,10 @@ export async function install(
       throw new CoreError('layout-unexpected', `包内顶层结构非预期(期望 ${wantRoot}/,实得 [${entries.join(', ')}])`);
     }
 
-    // ④ 布局验收:binSubdir 必须有 bin\;binAtRoot(node.exe 在根)只要求非空(内容真伪由校验和背书)
+    // ④ 布局验收:binSubdir 必须有 binName 子目录(默认 bin\,MinGit 是 cmd\);binAtRoot(node.exe 在根)只要求非空(内容真伪由校验和背书)
     if (entry.layout === 'binSubdir') {
-      if (!fs.existsSync(path.join(srcRoot, 'bin'))) throw new CoreError('layout-missing-bin', `缺 bin\\ 目录:${entry.id}`);
+      const bin = entry.binName ?? 'bin';
+      if (!fs.existsSync(path.join(srcRoot, bin))) throw new CoreError('layout-missing-bin', `缺 ${bin}\\ 目录:${entry.id}`);
     } else if (fs.readdirSync(srcRoot).length === 0) {
       throw new CoreError('layout-empty', '解压结果为空目录');
     }

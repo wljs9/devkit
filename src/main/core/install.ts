@@ -165,14 +165,17 @@ export async function install(
     fs.mkdirSync(tempDir, { recursive: true });
     await extractZip(out.partPath, { dir: tempDir });
 
-    // ③ 按 rootDir 归一化:期望顶层目录存在则用之;否则唯一顶层拍平(§7.5)
+    // ③ 按 rootDir 归一化:空 rootDir=文件直接铺在 zip 根(Python embed);期望顶层目录存在则用之;
+    //    否则唯一顶层拍平(§7.5,镜像/打包差异容错,JetBrains zip 单顶层目录依赖此路径)
     const wantRoot = renderTemplate(entry.rootDir, { ...vars, ver: ver.version });
     const entries = fs.readdirSync(tempDir);
     let srcRoot: string;
-    if (entries.includes(wantRoot) && fs.statSync(path.join(tempDir, wantRoot)).isDirectory()) {
+    if (!wantRoot) {
+      srcRoot = tempDir; // ★ F4:Python embed 等"flat 铺根"发行物
+    } else if (entries.includes(wantRoot) && fs.statSync(path.join(tempDir, wantRoot)).isDirectory()) {
       srcRoot = path.join(tempDir, wantRoot);
     } else if (entries.length === 1 && fs.statSync(path.join(tempDir, entries[0]!)).isDirectory()) {
-      srcRoot = path.join(tempDir, entries[0]!); // 唯一顶层拍平(镜像/打包差异容错)
+      srcRoot = path.join(tempDir, entries[0]!); // 唯一顶层拍平
     } else {
       throw new CoreError('layout-unexpected', `包内顶层结构非预期(期望 ${wantRoot}/,实得 [${entries.join(', ')}])`);
     }

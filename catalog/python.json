@@ -1,0 +1,45 @@
+{
+  "id": "python",
+  "displayName": "Python",
+  "listKind": "dirIndex",
+  "dirRegex": "^(?<ver>3\\.\\d+\\.\\d+)/$",
+  "fileRegex": "^python-(?<ver>\\d+\\.\\d+\\.\\d+)-embed-amd64\\.zip$",
+  "maxVersions": 4,
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/python/",
+      "fileUrl": "https://mirrors.huaweicloud.com/python/{ver}/python-{ver}-embed-amd64.zip",
+      "note": "F4 实测 2026-09-16:目录 200、embed zip Range 206(境内高速)"
+    },
+    {
+      "id": "official",
+      "listUrl": "https://www.python.org/ftp/python/",
+      "fileUrl": "https://www.python.org/ftp/python/{ver}/python-{ver}-embed-amd64.zip",
+      "proxyable": true,
+      "note": "备用;F4 实测 python.org 直连 206"
+    }
+  ],
+  "checksum": {
+    "kind": "pinnedHash",
+    "algo": "sha256",
+    "pinned": {},
+    "note": "★ F4 实测:python.org 只发 .asc 签名、不发哈希文件(官方下载页没有,镜像亦无 sidecar)→ walked pin。全部写走清单内置表,发新版例行更新;表外版本拒装"
+  },
+  "rootDir": "",
+  "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["python.exe"],
+    "exec": "python.exe",
+    "binDir": ".",
+    "version": [
+      { "kind": "exec", "exe": "python.exe", "args": ["--version"], "regex": "[Pp]ython (\\d+\\.\\d+\\.\\d+)", "note": "python --version → Python 3.12.8(stdout)" },
+      { "kind": "dirName", "regex": "^(?:python|python-embed)[-_]?(\\d[\\w.]*)?", "note": "目录名兜底" }
+    ],
+    "note": "★ F1 接管既有 Python(官网安装版 C:\\Users\\<name>\\AppData\\Local\\Programs\\Python\\Python312 或 portable):embed 发行版无 pip/tkinter(可 python -m ensurepip),GUI 安装版缺 UCRT 相关文件时以实际表现为准"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "curl 实测(华为/官方目录 200 + embed zip 206);真哈希与最新三版待 e2e 填充"
+  }
+}

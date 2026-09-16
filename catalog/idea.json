@@ -1,0 +1,45 @@
+{
+  "id": "idea",
+  "displayName": "IntelliJ IDEA Community",
+  "listKind": "jsonApi",
+  "listApi": "https://data.services.jetbrains.com/products/releases?code=IIC&type=release",
+  "listScan": {
+    "shape": "map",
+    "root": "IIC",
+    "versionPath": "version",
+    "assetPath": "downloads.windowsZip.link",
+    "checksumPath": "downloads.windowsZip.checksumLink",
+    "sizePath": "downloads.windowsZip.size"
+  },
+  "rawVersion": true,
+  "maxVersions": 6,
+  "fileRegex": "^ideaIC-[\\w.]+\\.win\\.zip$",
+  "sources": [
+    {
+      "id": "official",
+      "fileUrl": "{asset}",
+      "note": "F4 实测 2026-09-16:API 返回 windowsZip(win.zip 1.5GB)+ checksumLink;官方 download.jetbrains.com 境内直连 206"
+    }
+  ],
+  "checksum": {
+    "kind": "discoveredSidecar",
+    "algo": "sha256",
+    "note": "★ F4:版本发现的 checksumLink → download.jetbrains.com 同名 .sha256(挑裸哈希,实测 206 可取)"
+  },
+  "rootDir": "idea-IC-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\idea64.exe"],
+    "exec": "bin\\idea64.exe",
+    "binDir": "bin",
+    "version": [
+      { "kind": "releaseFile", "file": "build.txt", "regex": "IC-([A-Za-z0-9.\\-]+)", "note": "win zip 顶层 build.txt 内 IC-<build>;build≠版本号,仅作登记标识" },
+      { "kind": "exec", "exe": "bin\\idea64.exe", "args": ["-version"], "regex": "IntelliJ IDEA ([0-9.]+)", "note": "兜底" }
+    ],
+    "note": "★ F1 接管既有 IDEA Community(自带.bat 包解压目录)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "实测 API:269+ 条释放、windowsZip.image link+checksumLink 全在;下载 206"
+  }
+}

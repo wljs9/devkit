@@ -21,10 +21,10 @@ import { startFileServer, stubResponses } from './helpers/server';
 
 // ---- 真实仓库 catalog:加载即门禁(M1 测试不许绕过实测定稿文件) ----
 describe('catalog/ 定稿文件(§6)', () => {
-  it('三份清单全部通过 zod 校验', () => {
+  it('九份清单(jdk/node/maven + F4 六个)全部通过 zod 校验', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url)); // tests/ 上一级即仓库根
     const entries = loadCatalogDir(dir);
-    expect(entries.map((e) => e.id).sort()).toEqual(['jdk', 'maven', 'node']);
+    expect(entries.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'idea', 'jdk', 'maven', 'node', 'pycharm', 'python', 'vscode']);
   });
   it('S1 定稿门禁:Node 校验源首位必须是官方 nodejs.org(与默认下载源跨域,镜像 sidecar 只兜底)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));

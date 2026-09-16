@@ -1,0 +1,43 @@
+{
+  "id": "dbeaver",
+  "displayName": "DBeaver Community",
+  "listKind": "dirIndex",
+  "dirRegex": "^(?<ver>\\d+\\.\\d+\\.\\d+)/$",
+  "fileRegex": "^dbeaver-ce-(?<ver>\\d+\\.\\d+\\.\\d+)-windows-x86_64\\.zip$",
+  "maxVersions": 6,
+  "sources": [
+    {
+      "id": "ustc",
+      "listUrl": "https://mirrors.ustc.edu.cn/github-release/dbeaver/dbeaver/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/github-release/dbeaver/dbeaver/{ver}/dbeaver-ce-{ver}-windows-x86_64.zip",
+      "note": "F4 实测 2026-09-16:目录 200,含 26.2.0 多历史 tag;资产 dbeaver-ce-<ver>-windows-x86_64.zip"
+    },
+    {
+      "id": "github-direct",
+      "fileUrl": "https://github.com/dbeaver/dbeaver/releases/download/{ver}/dbeaver-ce-{ver}-windows-x86_64.zip",
+      "note": "全历史源(本机直连不可达,留作海外/网络变化时回退)"
+    }
+  ],
+  "checksum": {
+    "kind": "pinnedHash",
+    "algo": "sha256",
+    "pinned": {},
+    "note": "★ F4 实测:GitHub Release 不发布哈希资产,官方 dbeaver.io 亦无 sidecar → walked pin。哈希随新版本例行更新;表外版本拒装"
+  },
+  "rootDir": "dbeaver",
+  "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["dbeaver.exe"],
+    "exec": "dbeaver.exe",
+    "binDir": ".",
+    "version": [
+      { "kind": "exec", "exe": "dbeaver.exe", "args": ["--version"], "regex": "([0-9]+\\.[0-9]+\\.[0-9]+)", "note": "Eclipse 系应用 --version 一般可打出版本(待走查确认;失败则退回 dirName)" },
+      { "kind": "dirName", "regex": "^dbeaver[-_]?(\\d+[\\w.]*)?", "note": "目录名兜底" }
+    ],
+    "note": "★ F1 接管既有 DBeaver(自带独立 JRE,zip 顶层为 dbeaver/ 目录)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "curl 实测(USTC 目录 200、26.2.0 资产在;无 hash sidecar);真哈希待 e2e 填充"
+  }
+}

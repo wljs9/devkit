@@ -1,0 +1,47 @@
+{
+  "id": "git",
+  "displayName": "Git (MinGit)",
+  "listKind": "dirIndex",
+  "dirRegex": "^Git(?:%20| )for(?:%20| )Windows(?:%20| )v(?<ver>\\d+\\.\\d+\\.\\d+\\.windows\\.\\d+)/$",
+  "fileRegex": "^MinGit-(?<ver>[\\d.]+)-64-bit\\.zip$",
+  "rawVersion": true,
+  "maxVersions": 5,
+  "aliases": [{ "name": "gitver", "from": ".windows.", "to": "." }],
+  "sources": [
+    {
+      "id": "ustc",
+      "listUrl": "https://mirrors.ustc.edu.cn/github-release/git-for-windows/git/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/github-release/git-for-windows/git/{href}/MinGit-{gitver}-64-bit.zip",
+      "note": "F4 实测 2026-09-16:目录仅收录最新 tag(v2.55.0.windows.5,资产 MinGit-2.55.0.5-64-bit.zip),历史版本镜像未收录 → 本期 Git 实际只有最新版"
+    },
+    {
+      "id": "tuna",
+      "listUrl": "https://mirrors.tuna.tsinghua.edu.cn/github-release/git-for-windows/git/",
+      "fileUrl": "https://mirrors.tuna.tsinghua.edu.cn/github-release/git-for-windows/git/{href}/MinGit-{gitver}-64-bit.zip",
+      "note": "备源;TUNA github-release 已改 JS 渲染(fancyIndex),href 直接抓可能为空,留作换源兜底"
+    }
+  ],
+  "checksum": {
+    "kind": "pinnedHash",
+    "algo": "sha256",
+    "pinned": {},
+    "note": "★ F4 实测:git-for-windows Release 不发布哈希资产(USTC 资产清单无 sidecar,git-for-windows 仓库亦然)→ walked pin。哈希由仓库维护,发新版例行更新;表外版本拒装"
+  },
+  "rootDir": "mingit-{gitver}-64-bit",
+  "layout": "binSubdir",
+  "binName": "cmd",
+  "adopt": {
+    "markers": ["cmd\\git.exe"],
+    "exec": "cmd\\git.exe",
+    "binDir": "cmd",
+    "version": [
+      { "kind": "exec", "exe": "cmd\\git.exe", "args": ["--version"], "regex": "[gG]it version ([0-9]+(?:\\.[0-9A-Za-z]+)+)", "note": "git version 2.55.0.5.windows.1" },
+      { "kind": "dirName", "regex": "^(?:git|mingit)[-_]?(v?\\d[\\w.]*)?", "note": "目录名兜底(mingit-2.55.0.5-64-bit)" }
+    ],
+    "note": "★ F1 接管既有 Git(如 C:\\Program Files\\Git 或 mingit 目录):MinGit 无 git-bash,只含 git.exe 与内置工具;binDir='cmd'(git.exe 在 cmd\\)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "curl 实测(USTC/TUNA 目录 200、资产清单含 MinGit zip、无 hash sidecar);真哈希待 e2e 填充"
+  }
+}

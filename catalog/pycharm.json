@@ -1,0 +1,45 @@
+{
+  "id": "pycharm",
+  "displayName": "PyCharm Community",
+  "listKind": "jsonApi",
+  "listApi": "https://data.services.jetbrains.com/products/releases?code=PCC&type=release",
+  "listScan": {
+    "shape": "map",
+    "root": "PCC",
+    "versionPath": "version",
+    "assetPath": "downloads.windowsZip.link",
+    "checksumPath": "downloads.windowsZip.checksumLink",
+    "sizePath": "downloads.windowsZip.size"
+  },
+  "rawVersion": true,
+  "maxVersions": 6,
+  "fileRegex": "^pycharm-community-[\\w.]+\\.win\\.zip$",
+  "sources": [
+    {
+      "id": "official",
+      "fileUrl": "{asset}",
+      "note": "F4 实测 2026-09-16:与 IDEA 同一 JetBrains API(PCC code),checksumLink 齐备"
+    }
+  ],
+  "checksum": {
+    "kind": "discoveredSidecar",
+    "algo": "sha256",
+    "note": "★ F4:发现阶段携带 checksumLink → 同名 .sha256 裸哈希"
+  },
+  "rootDir": "pycharm-community-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\pycharm64.exe"],
+    "exec": "bin\\pycharm64.exe",
+    "binDir": "bin",
+    "version": [
+      { "kind": "releaseFile", "file": "build.txt", "regex": "PC-([A-Za-z0-9.\\-]+)", "note": "build.txt 内 PC-<build>;build≠版本号,仅作登记标识" },
+      { "kind": "exec", "exe": "bin\\pycharm64.exe", "args": ["-version"], "regex": "PyCharm ([0-9.]+)", "note": "兜底" }
+    ],
+    "note": "★ F1 接管既有 PyCharm Community(解压目录)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "实测 API:PCC 240 条释放、windowsZip + checksumLink 齐备"
+  }
+}

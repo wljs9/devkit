@@ -1,0 +1,36 @@
+{
+  "id": "vscode",
+  "displayName": "Visual Studio Code",
+  "listKind": "latestRedirect",
+  "fileRegex": "^VSCode-win32-x64-(?<ver>\\d+\\.\\d+\\.\\d+)\\.zip$",
+  "rawVersion": true,
+  "sources": [
+    {
+      "id": "official",
+      "listUrl": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
+      "fileUrl": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
+      "note": "F4 实测 2026-09-16:302 重定向到 vscode.download.prss.microsoft.com 终地址 VSCode-win32-x64-<ver>.zip,境内直连 206。无版本列表可循 → 本工具 VS Code 只保留最新稳定版"
+    }
+  ],
+  "checksum": {
+    "kind": "pinnedHash",
+    "algo": "sha256",
+    "pinned": {},
+    "note": "★ F4 实测:官方 /api/versions、/api/update 端点均 404(不公开 per-version 哈希);GitHub Release 无 SHA256SUMS 资产 → walked pin。哈希随最新版发布例行更新"
+  },
+  "rootDir": "VSCode-win32-x64",
+  "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["Code.exe"],
+    "exec": "Code.exe",
+    "binDir": ".",
+    "version": [
+      { "kind": "releaseFile", "file": "product.json", "regex": "\"version\"\\s*:\\s*\"([0-9]+\\.[0-9]+\\.[0-9]+)\"", "note": "Code.exe 同目录 product.json(官方发行版必有)" }
+    ],
+    "note": "★ F1 接管既有 VS Code(如 C:\\Program Files\\Microsoft VS Code、便携版解压目录)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-16",
+    "evidence": "curl 实测(重定向终址 VSCode-win32-x64-1.138.0.zip、206;清单端点 404);真哈希待 e2e 填充"
+  }
+}

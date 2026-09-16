@@ -1,10 +1,9 @@
 # DevKit — 待办与流程清单(新会话按此继续)
 
-> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写)。
+> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已完成并发布(下方"归档"节);P2 首批 F1(接管已有安装)/ F2(受管条目并入检测表)/
-> F3(系统环境变量开关)三项已实现并通过门禁(154 例绿 + `pnpm dist` 出 `devkit-setup-0.2.0.exe`),状态见 P2 表。
-> 下一批待办 = 用户走查意见 + 新清单项(仍按 P2 流程逐项做)。**
+> **当前状态:S1/S2/S3 + R1 已完成并发布(下方"归档"节);P2 首批 F1/F2/F3 已完成(154 例绿 + 0.2.0 出包);
+> 待走查两项人工已过(用户 2026-09-16 确认)。当前动作 = **F4 一星工具批量收录进行中**(Git/VS Code/Python/IDEA/PyCharm/DBeaver;范围与校验策略已拍板)。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -60,6 +59,7 @@
 | F1 | 功能 | **添加已有安装(接管)** —— 能把本机已存在的 JDK/Node/Maven 目录登记进 DevKit(建 current 链接、纳入切换),且机制必须清单驱动,后续加 Python/Git/MySQL/SQL Server/MinGW 只需补 catalog 的 `adopt` 段。验收:接管后「已安装」可见、可设为当前、可移出登记且**不删原文件**;非本工具目录/UNC/DevRoot 内目录一律拒。 | ✅ 完成 2026-09-14 · commit `717748d` |
 | F2 | 功能 | **受管条目并入 PATH 检测表** —— 环境页「外部条目区」不再过滤掉本工具 3 条受管条目,改为同表展示并打「受管」标签(不可勾删),让检测列表一条不漏。 | ✅ 完成 2026-09-14 · commit `ff6cc50` |
 | F3 | 功能 | **系统环境变量开关(默认关)** —— 设置页新增开关,开启(二次确认)后环境页出现「系统环境变量(HKLM)」区:可**增/改/删非 Windows 内置**的系统变量;内置变量(含系统 `Path`)一律只读拒改拒删;全部写入走 §7.2 四步 + 系统级快照可回滚。 | ✅ 完成 2026-09-14 · commit `8793ecb` |
+| F4 | 功能 | **一星工具批量收录**(《常用工具列表.md》★ 档去重后 6 个):Git(MinGit)/VS Code/Python(embed)/IDEA CE/PyCharm CE/DBeaver。范围 2026-09-16 已与用户拍板:①校验和缺口工具(Python/DBeaver等)走 **pinned 固定哈希**方案(S1 红线不动摇);②**浏览器本批跳过**(Chrome 备选方案=f官方 Chrome for Testing,Firefox 官方无 zip,均延后);③Postman 版本 API 残缺(下载 URL 404/列表空)→ 延后。核心含 `catalog.ts` 泛化:jsonApi/githubRelease(非 semver 版本)两种发现、pinned 校验、binName 布局、(vscode)jsonManifest 校验。验收:六个工具商店可见、安装(校验不缺口)、切换/卸载/接管齐,门禁全绿 + 小型工具走真实下载。 | ⏳ 进行中(2026-09-16 登记,开工先看 **F4 实况**) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -78,6 +78,16 @@
   → 设为当前 → 新开终端验 `node -v`;再 [移出登记] 确认目录文件原样。②以**管理员身份**运行 → 设置页开 F3 开关
   → 环境页新增一个自定义系统变量(如 `DEVKIT_TEST`)→ 改值 → 删除;同时试改 `Path`/`SystemRoot` 应被拒。
 - **已定旧账**:S1 遗留的"UI 走查装一次 Node"仍未亲测(自动化与 dist 已绿)—— 可并入本轮走查一并过掉。
+
+### F4 实况(2026-09-16 登记,一星工具收录)
+
+- **输入文档**:用户 2026-09-16 新增《常用工具列表.md》(★ 级难度划分)+ 改写《功能改进建议.md》为新需求"支持工具太少,先实现列表里最简单的";F1-F3 人工走查已确认通过。
+- **范围复述(已向用户拍板)**:★ 档 11 项去重后,Node/JDK 已在;浏览器(Chrome/Firefox)用户决定**本批跳过**;Postman 因下载 URL 404 + 版本 API 空响应延后。**F4 = 6 个:Git/VS Code/Python/IDEA CE/PyCharm CE/DBeaver**。
+- **探测事实(2026-09-16 本机 curl)**:Git 走 USTC/TUNA github-release 目录(200,LatestRelease 可解析);VS Code 官方 CDN 直连 206 + `/api/releases/stable` + 更新清单自带 sha256;Python 华为 embed zip 206 + 官方直连 206 但无哈希文件;JetBrains 官网 zip 206 + **自带 .sha256 sidecar**(API 也有 checksumLink);DBeaver USTC 目录 200 但无 sidecar。
+- **校验策略(用户选 pinned)**:官方无 sidecar 的工具在 catalog 内嵌 `pinned` 哈希表(发版时更新),下载**仍永远校验**;未收录版本安装给出可读错误而非放行。
+- **核心泛化(必做的下沉)**:`listKind` 新增 `jsonApi`(JetBrains 键控对象 / VS Code 平数组)+ dirIndex 支持非 semver 原始版本(`rawVersion`,Git tag `v2.47.0.windows.1`)与目录正则多余命名组(资产名 {base});发现结果支持 `maxVersions` 截取最新 N 个(防 VS Code/Git/JetBrains 几百版刷屏);`checksum.kind` 新增 `jsonManifest`(VS Code,顺手拿下载 URL)/`discoveredSidecar`(JetBrains,sidecar URL 随发现携带)/`pinnedHash`;`layout: binSubdir` 支持 `binName`(MinGit 是 `cmd\` 不是 `bin\`)。
+- **门禁**:天空依旧 154 例基线只增不减;`pnpm dist` 四段(动了 catalog/主进程必跑)。
+- **推送约定**:本批开发全程**不碰远端**;全部自测通过后**停在 push 前等用户开 VPN**,再 `git push origin main && git push origin --tags`。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

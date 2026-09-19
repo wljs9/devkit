@@ -24,7 +24,7 @@ describe('catalog/ 定稿文件(§6)', () => {
   it('九份清单(jdk/node/maven + F4 六个)全部通过 zod 校验', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url)); // tests/ 上一级即仓库根
     const entries = loadCatalogDir(dir);
-    expect(entries.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'idea', 'jdk', 'maven', 'node', 'pycharm', 'python', 'vscode']);
+    expect(entries.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'go', 'gradle', 'idea', 'jdk', 'maven', 'node', 'pycharm', 'python', 'sqlite', 'vscode']);
   });
   it('S1 定稿门禁:Node 校验源首位必须是官方 nodejs.org(与默认下载源跨域,镜像 sidecar 只兜底)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
@@ -41,7 +41,7 @@ describe('catalog/ 定稿文件(§6)', () => {
   it('★ F4 定稿门禁:pinnedHash 校验的工具,pinned 表非空且哈希为 64hex(F4 六工具真测哈希已回填)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
     const pinnedTools = loadCatalogDir(dir).filter((e) => e.checksum.kind === 'pinnedHash');
-    expect(pinnedTools.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'python', 'vscode']);
+    expect(pinnedTools.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'python', 'sqlite', 'vscode']);
     for (const e of pinnedTools) {
       expect(Object.keys(e.checksum.pinned ?? {}).length, `${e.id} 的 pinned 表为空(需先跑 scripts/f4-e2e.mts --pin 回填真哈希)`).toBeGreaterThan(0);
       for (const [ver, p] of Object.entries(e.checksum.pinned ?? {})) {
@@ -395,6 +395,92 @@ describe('F4 schema 守门', () => {
     expect(CatalogEntrySchema.safeParse({ ...e, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: { '1.0.0': { algo: 'sha256', hex: 'zzz' } } } }).success).toBe(false);
     expect(CatalogEntrySchema.safeParse({ ...e, checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: { '1.0.0': { algo: 'sha256', hex: 'a'.repeat(64) } } } }).success).toBe(true);
     expect(CatalogEntrySchema.safeParse({ ...e, layout: 'binSubdir', binName: 'cmd' }).success).toBe(true);
+  });
+});
+
+/** ★ F5(2026-09-19):jsonApi array(Go)/ regexPage(SQLite)/ discoveredInline 校验 */
+describe('F5 jsonApi array(Go dl API 形态)', () => {
+  function goCatalog() {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'go', displayName: 'Go', listKind: 'jsonApi', listApi: 'https://go.invalid/dl/?mode=json&include=all',
+      listScan: {
+        shape: 'array', versionPath: 'version', assetPath: 'files',
+        checksumPath: 'sha256', sizePath: 'size', versionRegex: '^go([\\d.]+)$',
+        pick: { os: 'windows', arch: 'amd64', kind: 'archive' },
+      },
+      rawVersion: true, maxVersions: 10,
+      fileRegex: '^go(?<ver>[\\d.]+)\\.windows-amd64\\.zip$',
+      sources: [{ id: 'google-cn', fileUrl: 'https://go.invalid/dl/{asset}' }],
+      checksum: { kind: 'discoveredInline', algo: 'sha256' },
+      rootDir: 'go', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('array:pick 键选目标资产,版本/内嵌哈希/体积全取;无 windows 资产(rc)跳过;自然降序 + maxVersions', async () => {
+    const body = JSON.stringify([
+      {
+        version: 'go1.27.1', stable: true,
+        files: [
+          { filename: 'go1.27.1.src.tar.gz', os: '', arch: '', kind: 'source', sha256: 'a'.repeat(64), size: 1 },
+          { filename: 'go1.27.1.windows-amd64.zip', os: 'windows', arch: 'amd64', kind: 'archive', sha256: 'b'.repeat(64), size: 78931360 },
+          { filename: 'go1.27.1.linux-amd64.tar.gz', os: 'linux', arch: 'amd64', kind: 'archive', sha256: 'c'.repeat(64), size: 2 },
+        ],
+      },
+      { version: 'go1.27rc3', stable: false, files: [{ filename: 'go1.27rc3.src.tar.gz', os: '', arch: '', kind: 'source', sha256: 'd'.repeat(64), size: 1 }] }, // 无 win zip → 跳过
+      { version: 'go1.26.8', stable: true, files: [{ filename: 'go1.26.8.windows-amd64.zip', os: 'windows', arch: 'amd64', kind: 'archive', sha256: 'e'.repeat(64), size: 67000000 }] },
+      { version: 'go1.25.1', stable: true, files: [{ filename: 'go1.25.1.windows-amd64.zip', os: 'windows', arch: 'amd64', kind: 'archive', sha256: 'f'.repeat(64), size: 67419304 }] },
+    ]);
+    const { fn } = await stubResponses({ 'https://go.invalid/dl/?mode=json&include=all': body });
+    const vs = await listVersions(goCatalog(), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['1.27.1', '1.26.8', '1.25.1']); // raw 去 go 前缀,rc 跳过,降序
+    expect(vs[0]!.asset).toBe('go1.27.1.windows-amd64.zip');
+    expect(vs[0]!.checksum).toEqual({ algo: 'sha256', hex: 'b'.repeat(64) }); // 内嵌哈希随发现携带
+    expect(vs[0]!.size).toBe(78931360);
+  });
+});
+
+describe('F5 regexPage(sqlite.org download.html 形态)', () => {
+  function sqliteCatalog(base: string) {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'sqlite', displayName: 'SQLite', listKind: 'regexPage',
+      dirRegex: 'PRODUCT,(?<ver>3\\.\\d+\\.\\d+),(?<path>20\\d{2}/sqlite-tools-win-x64-\\d+\\.zip),(?<size>\\d+),[0-9a-f]{64}',
+      fileRegex: '^sqlite-tools-win-x64-\\d+\\.zip$',
+      rawVersion: true, maxVersions: 3,
+      sources: [{ id: 'official', listUrl: `${base}/download.html`, fileUrl: `${base}/{path}` }],
+      checksum: { kind: 'pinnedHash', algo: 'sha256', pinned: {} },
+      rootDir: '', layout: 'binAtRoot',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('regexPage:数据行(注释 CSV)提版本/路径/体积,资产按 {path} 模板;自然降序 + 截断;其它产品行忽略', async () => {
+    const html = [
+      '<html><body>',
+      '<!-- PRODUCT,3.53.4,2026/sqlite-dll-win-x86-3530400.zip,1095354,64bf53d675ae2fcee57e180e8f59035e1b2b11ed5a2915450e26d0930a3cb9c8 -->',
+      '<!-- PRODUCT,3.53.4,2026/sqlite-tools-win-x64-3530400.zip,6557792,88b4659fe747896b853af10157316b4ade143553efb89c1c8ca7423a278dcc8b -->',
+      `<!-- PRODUCT,3.52.1,2025/sqlite-tools-win-x64-3520100.zip,6500000,${'a'.repeat(63)}b -->`,
+      '<!-- PRODUCT,3.51.0,2025/sqlite-tools-win-arm64-3510000.zip,5568458,0c99da3702b2517c1d738207db7e945e5c55be7748141a192a1c8f3b4455c44b -->', // 非 x64 → 不匹配
+      '</body></html>',
+    ].join('\n');
+    const { fn } = await stubResponses({ 'https://sq.invalid/download.html': html });
+    const vs = await listVersions(sqliteCatalog('https://sq.invalid'), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['3.53.4', '3.52.1']); // arm64 行不匹配,3.51.0 被截断
+    expect(vs[0]!.asset).toBe('sqlite-tools-win-x64-3530400.zip');
+    expect(vs[0]!.size).toBe(6557792);
+    expect(vs[0]!.extra?.path).toBe('2026/sqlite-tools-win-x64-3530400.zip');
+    // fileUrl 模板拼出真实下载 URL({path} 来自数据行,含年目录与 .zip)
+    const vars = { path: vs[0]!.extra?.path ?? '' };
+    expect(fileUrlFor(sqliteCatalog('https://sq.invalid'), 'official', vars)).toBe('https://sq.invalid/2026/sqlite-tools-win-x64-3530400.zip');
+  });
+
+  it('schema 守门:regexPage 缺 dirRegex 或缺 listUrl 源 → 拒绝', () => {
+    const e = nodeCatalog();
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: undefined }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: '^x$', sources: [{ id: 'o', fileUrl: 'x' }] }).success).toBe(false);
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: '^x$' }).success).toBe(true);
   });
 });
 

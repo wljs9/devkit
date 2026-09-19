@@ -59,6 +59,11 @@ async function resolveExpectedChecksum(
     if (!ver.checksum) throw new CoreError('checksum-missing', 'Temurin 版本条目缺 API checksum(发现逻辑异常)');
     return { algo: 'sha256', hex: ver.checksum.hex };
   }
+  // ★ F5:discoveredInline —— 校验和随发现结果携带但来源为非 Adoptium 的 JSON API(Go 官方 dl API 内嵌 sha256)
+  if (c.kind === 'discoveredInline') {
+    if (!ver.checksum) throw new CoreError('checksum-missing', `${entry.id} ${ver.version} 缺 API 内嵌校验和(发现逻辑异常)`);
+    return { algo: c.algo, hex: ver.checksum.hex };
+  }
   // ★ F4:pinned 固定哈希 —— 官方无 sidecar 的工具,权威 = 清单内置表(发版时人工核对更新)。表里没有 → 拒装(宁可不装,§3.5)
   if (c.kind === 'pinnedHash') {
     const p = c.pinned?.[String(ver.version)];

@@ -1,0 +1,53 @@
+{
+  "id": "go",
+  "displayName": "Go",
+  "listKind": "jsonApi",
+  "listApi": "https://golang.google.cn/dl/?mode=json&include=all",
+  "listScan": {
+    "shape": "array",
+    "versionPath": "version",
+    "assetPath": "files",
+    "checksumPath": "sha256",
+    "sizePath": "size",
+    "pick": { "os": "windows", "arch": "amd64", "kind": "archive" },
+    "versionRegex": "^go([\\d.]+)$"
+  },
+  "fileRegex": "^go(?<ver>[\\d.]+)\\.windows-amd64\\.zip$",
+  "rawVersion": true,
+  "maxVersions": 10,
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "google-cn",
+      "fileUrl": "https://golang.google.cn/dl/{asset}",
+      "note": "F5 实测 2026-09-19:官方中国站(dl API 同域),zip Range 206、1MB 采样 1.6MB/s,境内直连可用;资产名来自 API filename"
+    },
+    {
+      "id": "aliyun",
+      "fileUrl": "https://mirrors.aliyun.com/golang/{asset}",
+      "note": "备用境内镜像:F5 实测 171 个历史版直链、Range 206(无 sidecar,校验和只认 API 内嵌值,不受影响)"
+    }
+  ],
+  "checksum": {
+    "kind": "discoveredInline",
+    "algo": "sha256",
+    "note": "★ F5:官方 dl API 每个文件的 sha256 内嵌在响应里(golang.google.cn 与 google 官方同数据),权威、零额外请求、天然跨域 —— 与 Temurin 的 adoptiumApi 同范式"
+  },
+  "rootDir": "go",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\go.exe"],
+    "exec": "bin\\go.exe",
+    "binDir": "bin",
+    "version": [
+      { "kind": "releaseFile", "file": "VERSION", "regex": "^go(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "Go 发行树根 VERSION 文件首行 go<ver>(权威、零执行风险)" },
+      { "kind": "exec", "exe": "bin\\go.exe", "args": ["version"], "regex": "go version go(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "go version 兜底" },
+      { "kind": "dirName", "regex": "^go[-_]?(\\d+\\.\\d+(?:\\.\\d+)?)$", "note": "目录名兜底" }
+    ],
+    "note": "★ F5 接管既有 Go(官方 zip 解压目录 / scoop 目录)。zip 顶层目录固定名 go,接管时用户选内层或外层目录均可(markers 在内层)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-19",
+    "evidence": "F5 探测:dl API 365 版全带 windows-amd64 archive 的 sha256+size;golang.google.cn zip 206;阿里云镜像 206"
+  }
+}

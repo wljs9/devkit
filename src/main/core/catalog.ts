@@ -28,7 +28,7 @@ const SourceSchema = z
 
 const ChecksumSchema = z
   .object({
-    kind: z.enum(['shasumsFile', 'adoptiumApi', 'officialSidecar', 'discoveredSidecar', 'pinnedHash']),
+    kind: z.enum(['shasumsFile', 'adoptiumApi', 'officialSidecar', 'discoveredSidecar', 'pinnedHash', 'discoveredInline']),
     algo: z.enum(['sha256', 'sha512']),
     urls: z.array(z.string()).optional(),
     lineMatch: z.string().optional(),
@@ -89,13 +89,17 @@ export type AdoptProbe = z.infer<typeof AdoptProbeSchema>;
 /** ★ F4 jsonApi:JSON 版本 API 的形状(点路径取值,JetBrains 键控对象 / 平数组) */
 const ListScanSchema = z
   .object({
-    shape: z.enum(['flat', 'map']),
+    shape: z.enum(['flat', 'map', 'array']),
     /** map 型:响应里版本数组所在点路径(JetBrains:"IIC") */
     root: z.string().optional(),
     versionPath: z.string().optional(),
     assetPath: z.string().optional(),
     checksumPath: z.string().optional(),
     sizePath: z.string().optional(),
+    /** ★ F5 array 型(Go):每版本内选目标资产的过滤键(如 os/arch/kind),全部命中才取 */
+    pick: z.record(z.string()).optional(),
+    /** ★ F5:版本串规整正则(首捕获组=版本;Go 的 "go1.27.1" → "1.27.1")。仅 array 形状消费 */
+    versionRegex: z.string().optional(),
   })
   .strict();
 
@@ -103,7 +107,7 @@ export const CatalogEntrySchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     displayName: z.string(),
-    listKind: z.enum(['dirIndex', 'adoptiumApi', 'jsonApi', 'latestRedirect']),
+    listKind: z.enum(['dirIndex', 'adoptiumApi', 'jsonApi', 'latestRedirect', 'regexPage']),
     majors: z.array(z.number().int().positive()).optional(),
     listApi: z.string().optional(),
     releaseFields: z
@@ -146,6 +150,8 @@ export const CatalogEntrySchema = z
     if (e.listKind === 'adoptiumApi' && (!e.listApi || !e.releaseFields || !e.majors)) ctx.addIssue({ code: 'custom', message: 'adoptiumApi 需 listApi/releaseFields/majors' });
     if (e.listKind === 'jsonApi' && (!e.listApi || !e.listScan)) ctx.addIssue({ code: 'custom', message: 'jsonApi 需 listApi/listScan' });
     if (e.listKind === 'latestRedirect' && !e.sources.some((s) => s.listUrl)) ctx.addIssue({ code: 'custom', message: 'latestRedirect 需 source.listUrl(=重定向地址)' });
+    // ★ F5 regexPage:数据行嵌在 HTML/文本页里(如 sqlite.org download.html 的 PRODUCT,CSV 行),dirRegex 复用为行正则
+    if (e.listKind === 'regexPage' && (!e.dirRegex || !e.sources.some((s) => s.listUrl))) ctx.addIssue({ code: 'custom', message: 'regexPage 需 dirRegex(行正则)+ 带 listUrl 的源' });
   });
 
 export type CatalogSource = z.infer<typeof SourceSchema>;
@@ -357,7 +363,9 @@ function parseDirIndex(entry: CatalogEntry, listUrl: string, html: string): Disc
  * ★ F4:JSON 版本 API 解析(listKind jsonApi)。
  * - flat:响应是版本串平数组(VS Code /api/releases/stable 形态,资产由 fileUrl 模板推);
  * - map:响应是键控对象(listScan.root 指向数组,各字段走点路径)—— JetBrains 形态,
- *   资产与校验和 URL 直接来自 API(downloads.windowsZip.link/.checksumLink),template 只留 asset 占位。
+ *   资产与校验和 URL 直接来自 API(downloads.windowsZip.link/.checksumLink),template 只留 asset 占位;
+ * - ★ F5 array:响应是版本对象平数组(Go golang.google.cn/dl/?mode=json 形态),每版本内
+ *   用 pick 键过滤出目标资产(os/arch/kind 全命中),版本/资产/内嵌哈希/体积走点路径。
  */
 function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
   const scan = entry.listScan!;
@@ -369,6 +377,30 @@ function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
       const version = normalVersion(item, true);
       if (!version) continue;
       out.push({ tool: entry.id, version, dir: version, asset: '', preferredSourceId: entry.sources[0]!.id });
+    }
+  } else if (scan.shape === 'array') {
+    const arr = Array.isArray(json) ? json : [];
+    for (const item of arr) {
+      const verRaw = String(dotGet(item, scan.versionPath ?? '') ?? '');
+      // versionRegex(首捕获组)优先:Go 的 "go1.27.1" → "1.27.1";否则沿用 normalVersion
+      const pre = scan.versionRegex ? (new RegExp(scan.versionRegex).exec(verRaw)?.[1] ?? '') : verRaw;
+      const version = normalVersion(pre, entry.rawVersion ?? true);
+      if (!version) continue;
+      // 版本内选目标资产:pick 键全命中的首个文件(Go:os=windows & arch=amd64 & kind=archive)
+      const files = Array.isArray(dotGet(item, scan.assetPath ?? '')) ? (dotGet(item, scan.assetPath ?? '') as unknown[]) : [];
+      const hit = files.find((f) => Object.entries(scan.pick ?? {}).every(([k, want]) => dotGet(f, k) === want));
+      if (!hit) continue; // 无目标平台资产的版本(rc/beta 或纯源码)跳过
+      const sizeRaw = Number(dotGet(hit, scan.sizePath ?? ''));
+      const checksumRaw = String(dotGet(hit, scan.checksumPath ?? '') ?? '');
+      out.push({
+        tool: entry.id,
+        version,
+        dir: version,
+        asset: String(dotGet(hit, 'filename') ?? ''),
+        size: Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : undefined,
+        checksum: /^[0-9a-f]{64,128}$/i.test(checksumRaw) ? { algo: 'sha256', hex: checksumRaw.toLowerCase() } : undefined,
+        preferredSourceId: entry.sources[0]!.id,
+      });
     }
   } else {
     const rootList = Array.isArray(dotGet(json, scan.root ?? '')) ? (dotGet(json, scan.root ?? '') as unknown[]) : [];
@@ -387,6 +419,38 @@ function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
         preferredSourceId: entry.sources[0]!.id,
       });
     }
+  }
+  out.sort((a, b) => naturalCompare(b.version, a.version));
+  return entry.maxVersions ? out.slice(0, entry.maxVersions) : out;
+}
+
+/**
+ * ★ F5(2026-09-19):数据行嵌在页面里的官方发布页(listKind regexPage)—— sqlite.org/download.html 形态:
+ * 页面不含常规 <a href> 直链(JS 注入 href),但内嵌数据行(HTML 注释 CSV / 脚本调用)带全字段
+ * 版本/路径/体积/哈希。dirRegex 复用为【行正则】(多行模式逐行扫,取命名组)。
+ */
+function parseRegexPage(entry: CatalogEntry, html: string): DiscoveredVersion[] {
+  const re = new RegExp(entry.dirRegex!, 'g');
+  const out: DiscoveredVersion[] = [];
+  for (const m of html.matchAll(re)) {
+    const g = m.groups ?? {};
+    const raw = g.ver ?? '';
+    const version = normalVersion(raw, entry.rawVersion);
+    if (!version) continue;
+    if (entry.versionPolicy?.exclude?.includes(version)) continue;
+    // 资产名 = 数据行里匹配 fileRegex 的文件名段(sqlite 的 {path} 含年目录,纯文件名 = path 末段)
+    const fileName = (g.path ?? '').split('/').at(-1) ?? '';
+    if (!new RegExp(entry.fileRegex).exec(fileName)) continue; // 不像目标文件的行跳过
+    const asset = renderTemplate(fileName, { ...g, ver: raw });
+    out.push({
+      tool: entry.id,
+      version,
+      dir: raw,
+      asset,
+      size: Number(g.size) > 0 ? Number(g.size) : undefined,
+      extra: { ...g, path: g.path ?? '' },
+      preferredSourceId: entry.sources[0]!.id,
+    });
   }
   out.sort((a, b) => naturalCompare(b.version, a.version));
   return entry.maxVersions ? out.slice(0, entry.maxVersions) : out;
@@ -461,6 +525,22 @@ export async function listVersions(entry: CatalogEntry, ctx: ListContext = {}): 
   let versions: DiscoveredVersion[];
   if (entry.listKind === 'latestRedirect') {
     return parseLatestRedirect(entry, ctx);
+  }
+  if (entry.listKind === 'regexPage') {
+    const withList = entry.sources.find((s) => s.listUrl);
+    let lastErr: unknown;
+    let page = '';
+    for (const s of entry.sources) {
+      if (!s.listUrl) continue;
+      try {
+        page = await getText(s.listUrl);
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!page) throw new CoreError('catalog-unreachable', `所有页面源失败:${String((lastErr as Error)?.message ?? '')}`);
+    return parseRegexPage(entry, page);
   }
   if (entry.listKind === 'jsonApi') {
     const arr = (await f(renderTemplate(entry.listApi ?? '', {}), { headers: { 'User-Agent': 'DevKit-M1/0.1' }, signal: AbortSignal.timeout(30_000) })).json();

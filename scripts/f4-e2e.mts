@@ -24,7 +24,7 @@ const ROOT = path.resolve(process.cwd()); // 从仓库根运行
 const DEV = fs.mkdtempSync(path.join(os.tmpdir(), 'devkit-f4-e2e-'));
 
 const entries = new Map(loadCatalogDir(path.join(ROOT, 'catalog')).map((e) => [e.id, e]));
-const TOOLS = [...entries.keys()].filter((id) => ['git', 'vscode', 'python', 'idea', 'pycharm', 'dbeaver'].includes(id));
+const TOOLS = [...entries.keys()].filter((id) => ['git', 'vscode', 'python', 'idea', 'pycharm', 'dbeaver', 'gradle', 'go', 'sqlite'].includes(id));
 
 async function discover(e: CatalogEntry) {
   const cache = { file: path.join(os.tmpdir(), 'f4-cache.json') };

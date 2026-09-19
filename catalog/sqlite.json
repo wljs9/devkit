@@ -1,0 +1,41 @@
+{
+  "id": "sqlite",
+  "displayName": "SQLite (CLI 工具)",
+  "listKind": "regexPage",
+  "dirRegex": "PRODUCT,(?<ver>3\\.\\d+\\.\\d+),(?<path>20\\d{2}/sqlite-tools-win-x64-\\d+\\.zip),(?<size>\\d+),[0-9a-f]{64}",
+  "fileRegex": "^sqlite-tools-win-x64-\\d+\\.zip$",
+  "rawVersion": true,
+  "maxVersions": 3,
+  "sources": [
+    {
+      "id": "official",
+      "listUrl": "https://www.sqlite.org/download.html",
+      "fileUrl": "https://www.sqlite.org/{path}",
+      "note": "F5 实测 2026-09-19:download.html 的 PRODUCT 数据行(HTML 注释内 CSV)带 版本/年目录路径/体积,zip 直链 Range 206;页内常规 <a> 是 JS 注入(hp1.html),故走 regexPage 扫数据行。无国内镜像(华为云 /sqlite/ 已下架为 SPA 兜底页),官方直连 ~5MB 采样 129KB/s"
+    }
+  ],
+  "checksum": {
+    "kind": "pinnedHash",
+    "algo": "sha256",
+    "pinned": {
+      "3.53.4": { "algo": "sha256", "hex": "f46ee2475de4cbe287e6e5f7d43c838796b14e7379cd216bdbb28d391429f9fc" }
+    },
+    "note": "★ F5:官方只发布 SHA3-256 汇总(download.html 内嵌 SHA3 值,非 SHA-256,核心哈希器不支持且该值是页内脚本变量)→ walked pin(F4 同款口径,python/vscode 已验证)。本表 hex 为 F5 e2e 真下载整包 sha256;发新版例行回填,表外版本拒装"
+  },
+  "rootDir": "",
+  "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["sqlite3.exe"],
+    "exec": "sqlite3.exe",
+    "binDir": ".",
+    "version": [
+      { "kind": "exec", "exe": "sqlite3.exe", "args": ["--version"], "regex": "(\\d+\\.\\d+\\.\\d+)", "note": "sqlite3 --version 首段即版本(形如 3.53.4)" },
+      { "kind": "dirName", "regex": "(\\d+\\.\\d+\\.\\d+)", "note": "目录名兜底" }
+    ],
+    "note": "★ F5 接管既有 SQLite 工具目录(单 exe 平铺)。tools 包仅 sqlite3/sqldiff/sqlite3_analyzer 等命令行工具,无 sqlite3.dll(sqlite-dll 包是另一发行物,本期不收)"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-19",
+    "evidence": "F5 探测:download.html PRODUCT 行解析出 3.53.4/2026 路径;真下载 6.25MB sha256=f46ee247…429f9fc 与整包一致"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "gradle",
+  "displayName": "Gradle",
+  "listKind": "dirIndex",
+  "dirRegex": "^gradle-(?<ver>\\d+\\.\\d+(?:\\.\\d+)?)-bin\\.zip$",
+  "fileRegex": "^gradle-(?<ver>\\d+\\.\\d+(?:\\.\\d+)?)-bin\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "maxVersions": 10,
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/gradle/",
+      "fileUrl": "https://mirrors.huaweicloud.com/gradle/gradle-{ver}-bin.zip",
+      "note": "F5 实测 2026-09-19:目录 SSR 直链 gradle-<ver>-bin.zip(170 个历史版),zip PK 魔数 + Accept-Ranges 实确;华为云同名 .sha256 sidecar 与官方一致(9.7.1 抽验)"
+    },
+    {
+      "id": "tencent",
+      "listUrl": "https://mirrors.cloud.tencent.com/gradle/",
+      "fileUrl": "https://mirrors.cloud.tencent.com/gradle/gradle-{ver}-bin.zip",
+      "note": "备用境内源:F5 实测同形目录(170 版)、PK 魔数确认真文件"
+    },
+    {
+      "id": "official",
+      "fileUrl": "https://services.gradle.org/distributions/gradle-{ver}-bin.zip",
+      "proxyable": true,
+      "note": "官方源:301 跳转 CDN,境内未必直连可用;无版本列表(仅作下载兜底)"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha256",
+    "urls": [
+      "https://services.gradle.org/distributions/gradle-{ver}-bin.zip.sha256",
+      "https://mirrors.huaweicloud.com/gradle/gradle-{ver}-bin.zip.sha256"
+    ],
+    "note": "官方 services.gradle.org 侧车为裸 sha256(301 可跟);华为云同名 sidecar 兜底(两者 F5 实测一致)。install.ts orderChecksumUrls 会把与下载源同主机的校验源降序,跨域背书自动成立"
+  },
+  "rootDir": "gradle-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\gradle.bat"],
+    "exec": "bin\\gradle.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "fileGlob", "dir": "lib", "pattern": "^gradle-core-(\\d+\\.\\d+(?:\\.\\d+)?)\\.jar$", "note": "lib\\gradle-core-<ver>.jar 的版本即发行版版本,零执行风险" },
+      { "kind": "dirName", "regex": "^(?:gradle-)?(\\d+\\.\\d+(?:\\.\\d+)?)$", "note": "目录名兜底" },
+      { "kind": "exec", "exe": "bin\\gradle.bat", "args": ["--version"], "regex": "Gradle (\\d+\\.\\d+(?:\\.\\d+)?)", "note": "最后兜底:gradle.bat 经 cmd.exe /c 执行(需 JAVA_HOME)" }
+    ],
+    "note": "★ F5 接管既有 Gradle(scoop/手动解压目录)。gradle.bat 依赖 JAVA_HOME,探测失败原因会沿链路逐条呈现"
+  },
+  "m0": {
+    "verifiedAt": "2026-09-19",
+    "evidence": "F5 探测:华为/腾讯目录 200 直链 + zip PK 魔数 + Range 206 + sidecar 与官方一致(9.7.1)"
+  }
+}

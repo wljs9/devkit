@@ -398,6 +398,34 @@ describe('F4 校验与布局泛化', () => {
     await expect(install(bad.data, verOf(V2), {}, ctx(bad.data))).rejects.toThrowError(/缺 bin\\ 目录/);
   });
 
+  it('★ F5 discoveredInline:发现携带的 API 内嵌哈希 → 校验安装;缺内嵌值 → checksum-missing(Go 范式)', async () => {
+    const buf = zipFor(V1);
+    const srv = await startFileServer(buf, `pkg-${V1}.zip`);
+    servers.push(srv);
+    const good = createHash('sha256').update(buf).digest('hex');
+    const entry = CatalogEntrySchema.safeParse({ ...mkEntry(srv.url), checksum: { kind: 'discoveredInline', algo: 'sha256' } });
+    if (!entry.success) throw new Error(entry.error.message);
+    // 内嵌哈希随发现结果携带(与 adoptiumApi 同范式),不需要任何 sidecar 请求
+    const rec = await install(entry.data, { ...verOf(V1), checksum: { algo: 'sha256', hex: good } }, {}, ctx(entry.data));
+    expect(rec.sha256).toBe(good);
+    expect(markerViaCurrent()).toBe(`content-${V1}`);
+
+    // 哈希不匹配(表内值被污染/发错版)→ checksum-mismatch 拒装
+    const buf2 = zipFor(V2);
+    const srv2 = await startFileServer(buf2, `pkg-${V2}.zip`);
+    servers.push(srv2);
+    const badInline = CatalogEntrySchema.safeParse({ ...mkEntry(srv2.url), checksum: { kind: 'discoveredInline', algo: 'sha256' } });
+    if (!badInline.success) throw new Error(badInline.error.message);
+    await expect(
+      install(badInline.data, { ...verOf(V2), checksum: { algo: 'sha256', hex: good } }, {}, ctx(badInline.data)),
+    ).rejects.toThrowError(/校验和不匹配/);
+
+    // 发现结果缺内嵌哈希(发现逻辑异常)→ checksum-missing
+    const noInline = CatalogEntrySchema.safeParse({ ...mkEntry(srv2.url), checksum: { kind: 'discoveredInline', algo: 'sha256' } });
+    if (!noInline.success) throw new Error(noInline.error.message);
+    await expect(install(noInline.data, verOf(V2), {}, ctx(noInline.data))).rejects.toThrowError(/缺 API 内嵌校验和/);
+  });
+
   it('空 rootDir(flat 铺根):Python embed 形态 —— 多文件直接在 zip 根,整树即安装根', async () => {
     const buf = makeZip([
       { name: `${PKG}.exe`, data: Buffer.from('py-exe') },

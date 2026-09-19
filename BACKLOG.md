@@ -1,10 +1,10 @@
 # DevKit — 待办与流程清单(新会话按此继续)
 
-> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记)。
+> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已发布;F1/F2/F3 已完成;F4 一星工具批量收录**已完成并推送(2026-09-17,
-> 166 例绿 + v0.3.0 出包 + 四工具真机 e2e 过),`CLAUDE.md` 已同步。当前待办 = P2 表里 F4 剩余走查收尾
-> + 用户后续清单(新会话先读 `CLAUDE.md` 启动指引,再回本表)。**
+> **当前状态:S1/S2/S3 + R1 已发布;F1/F2/F3/F4 已完成;F5 二星第一批(Go/Gradle/SQLite)**已实现并真机
+> e2e 通过(2026-09-19,170 例绿 + 三工具真装全过),`CLAUDE.md` 已同步。当前待办 = P2 表里 F5 剩余
+> 走查收尾 + 用户后续清单(新会话先读 `CLAUDE.md` 启动指引,再回本表)。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -49,7 +49,7 @@
 > 1. **复述范围**:向用户复述该项理解,边界不清先问;
 > 2. **登记**:追加进下表并编号 —— bug=`B#`、功能=`F#`、改进=`C#`,写清"现象/期望、涉及文件(猜的也行,开工先核)、验收标准";
 > 3. **改前必存**:工作树干净(或先 commit 在制品)才动代码;
-> 4. **实现 + 补测试**:门禁基线 **111 例只增不减**(§11);纯逻辑入 `src/main/core/`(arch.test 十模块铁律,渲染层组件保持哑);
+> 4. **实现 + 补测试**:门禁基线 **170 例只增不减**(§11);纯逻辑入 `src/main/core/`(arch.test 十模块铁律,渲染层组件保持哑);
 > 5. **绿了才交**:`pnpm typecheck && pnpm test`;动到 catalog/主进程/打包链再 `pnpm dist`;
 > 6. **单独 commit**:信息注明 `B#/F#/C#`,本节该条打勾 + 记 commit 号;
 > 7. **小结等确认**(CLAUDE.md 阶段性执行铁律,严禁连做下一项);
@@ -60,7 +60,8 @@
 | F1 | 功能 | **添加已有安装(接管)** —— 能把本机已存在的 JDK/Node/Maven 目录登记进 DevKit(建 current 链接、纳入切换),且机制必须清单驱动,后续加 Python/Git/MySQL/SQL Server/MinGW 只需补 catalog 的 `adopt` 段。验收:接管后「已安装」可见、可设为当前、可移出登记且**不删原文件**;非本工具目录/UNC/DevRoot 内目录一律拒。 | ✅ 完成 2026-09-14 · commit `717748d` |
 | F2 | 功能 | **受管条目并入 PATH 检测表** —— 环境页「外部条目区」不再过滤掉本工具 3 条受管条目,改为同表展示并打「受管」标签(不可勾删),让检测列表一条不漏。 | ✅ 完成 2026-09-14 · commit `ff6cc50` |
 | F3 | 功能 | **系统环境变量开关(默认关)** —— 设置页新增开关,开启(二次确认)后环境页出现「系统环境变量(HKLM)」区:可**增/改/删非 Windows 内置**的系统变量;内置变量(含系统 `Path`)一律只读拒改拒删;全部写入走 §7.2 四步 + 系统级快照可回滚。 | ✅ 完成 2026-09-14 · commit `8793ecb` |
-| F4 | 功能 | **一星工具批量收录**(《常用工具列表.md》★ 档去重后 6 个):Git(MinGit)/VS Code/Python(embed)/IDEA CE/PyCharm CE/DBeaver。范围 2026-09-16 已与用户拍板:①校验和缺口工具(Python/DBeaver等)走 **pinned 固定哈希**方案(S1 红线不动摇);②**浏览器本批跳过**(Chrome 备选方案=f官方 Chrome for Testing,Firefox 官方无 zip,均延后);③Postman 版本 API 残缺(下载 URL 404/列表空)→ 延后。核心含 `catalog.ts` 泛化:jsonApi/latestRedirect 发现、rawVersion 自然序、aliases、maxVersions、pinned/discoveredSidecar 校验、binName 布局、空 rootDir 平铺。验收:六个工具商店可见、安装(校验不缺口)、切换/卸载/接管齐,门禁全绿 + **四个 pinned 工具真下载 e2e(已过:python/git/dbeaver/vscode)**。 | ✅ 已实现(核心+catalog+真机 e2e,2026-09-16);剩余=走查(见 F4 实况) |
+| F4 | 功能 | **一星工具批量收录**(《常用工具列表.md》★ 档去重后 6 个):Git(MinGit)/VS Code/Python(embed)/IDEA CE/PyCharm CE/DBeaver。范围 2026-09-16 已与用户拍板:①校验和缺口工具(Python/DBeaver等)走 **pinned 固定哈希**方案(S1 红线不动摇);②**浏览器本批跳过**(Chrome 备选方案=f官方 Chrome for Testing,Firefox 官方无 zip,均延后);③Postman 版本 API 残缺(下载 URL 404/列表空)→ 延后。核心含 `catalog.ts` 泛化:jsonApi/latestRedirect 发现、rawVersion 自然序、aliases、maxVersions、pinned/discoveredSidecar 校验、binName 布局、空 rootDir 平铺。验收:六个工具商店可见、安装(校验不缺口)、切换/卸载/接管齐,门禁全绿 + **四个 pinned 工具真下载 e2e(已过:python/git/dbeaver/vscode)**。 | ✅ 完成并推送 2026-09-17 · commit `fef8a39` |
+| F5 | 功能 | **二星工具第一批收录**(《功能改进建议.md》2026-09-19:评估 ★★☆☆☆ 两节后用户拍板按"轻松档"先收 3 个):**Gradle / Go / SQLite**。核心扩展:`listScan.shape` 增 `array`(Go dl API:versionRegex 剥 `go` 前缀 + pick 键选 win-amd64 资产)+ checksum kind 增 `discoveredInline`(API 内嵌 sha256,adoptiumApi 同范式)+ listKind 增 `regexPage`(sqlite.org download.html 的 PRODUCT 数据行)。源:Gradle=华为云(170 版)/腾讯云 + 官方 sha256 侧车(跨域);Go=golang.google.cn(1.6MB/s)+ 阿里云镜像(171 版);SQLite=官方单源 ~6MB + pinnedHash(3.53.4 真哈希已回填)。**真机 e2e 三工具全过**(gradle 9.7.1 需 JAVA_HOME 属工具常识;go `go version go1.27.1`、sqlite `3.53.4` 实测)。验收:三工具商店可见/版本列表/安装/切换/接管齐 + 门禁全绿(170/170)。**未收录的评估结论见下方「F5 未收录工具」节,Tomcat/Nginx/CMake/Rust 延后待用户发落。** | ✅ 已实现(核心+catalog+真机 e2e,2026-09-19);剩余=走查(见 F5 实况) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -91,6 +92,25 @@
   - 已知边界(如实):Git/VS Code 镜像只留最新稳定版;VS Code 新 CDN 包=扁平根+{commit}/ 运行时目录(安装按 flat 整树);python embed 无 pip/tkinter(可 `python -m ensurepip`);IDEA/PyCharm adopt 走 build.txt 的 IC-/PC- build(≠版本号,仅标签);`--version` 仅对 GUI exe 直接 spawn 不可用(本工具用 openPath)。
 - **待用户走查(人工项)**:①商店页六个工具均可见、版本列表不爆表;②真装一次 Python 或 Git → 设为当前 → 新开终端验 `python`/`git`;③接管真实既有 VS Code/IDEA 目录→ 版本识别;④安装一个 unpinned 版本(如 python 3.14.3)→ 应被 `checksum-unpinned` 拒装并有可读提示。**走查通过后才可推送**;走查前保持"已实现"状态,推前等用户开 VPN。
 
+### F5 实况(2026-09-19:评估 → 实现 → 三工具真机 e2e 全过;等待用户走查)
+
+- **输入文档**:用户 2026-09-19 《功能改进建议.md》"评估二星的工具哪一些合适装上去";评估结论已口头汇报(轻松档=Gradle/SQLite/Go,困难档=Tomcat/Nginx/CMake/Rust),用户拍板"按你的建议执行,先做第一批,未收录的也记录回写文档,完工推 GitHub(连带 release),推送前等开 VPN"。
+- **已实现(commit:`bcfd2be` 核心+三 catalog+测试)**:
+  - 核心:`listScan.shape` += `array`(Go dl API 是版本对象平数组,每版本内 `pick` 键选目标资产 os=windows/arch=amd64/kind=archive,`versionRegex` 剥 `go` 前缀,内嵌 sha256 随发现携带)+ `checksum.kind` += `discoveredInline`(API 内嵌哈希,adoptiumApi 同范式)+ `listKind` += `regexPage`(数据行嵌在页面里,dirRegex 复用为行正则;sqlite.org download.html 的常规 `<a>` 是 JS 注入,只有 HTML 注释里的 PRODUCT CSV 行带全字段);门禁 166→**170 只增不减**。
+  - 源定稿(2026-09-19 实测):**Gradle**=华为云 dirIndex 直链(170 版,PK 魔数 + Range 206)/腾讯云同形 + 官方 `services.gradle.org/.sha256` 裸哈希(华为云同名 sidecar 与官方 9.7.1 抽验一致;install.ts orderChecksumUrls 自动跨域背书);**Go**=`golang.google.cn/dl/?mode=json&include=all`(365 版全带 win-amd64 sha256+size,zip Range 206、1MB 采样 1.6MB/s)+ 阿里云镜像(171 版直链;华为云 /golang/ 401 已弃);**SQLite**=官方 download.html 单源(华为云 /sqlite/ 已下架为 SPA 兜底页、TUNA/阿里/腾讯无)+ pinnedHash。
+  - e2e 真机:sqlite(3.53.4,pinned 校验命中,平铺根,`sqlite3 --version` 实测 3.53.4)/ go(1.27.1,75MB 真下载,API 内嵌 sha256 校验命中,VERSION 文件探测 via=releaseFile,`go version` 实测 go1.27.1 windows/amd64)/ gradle(9.7.1,151MB 真下载,官方 sha256 侧车校验命中,lib\gradle-core-*.jar 探测 via=fileGlob,`gradle --version` 实测 Gradle 9.7.1 —— 需本机 JAVA_HOME 属工具常识非收录缺陷)。
+  - 已知边界:Go 下载走官方中国站 + 阿里云,无华为云;SQLite 仅官方源(~130KB/s,包小可接受)且 pinned 只留最新数版,发新版例行回填;Gradle adopt 探测的 exec 兜底依赖 JAVA_HOME(链路上 fileGlob/dirName 两档零依赖先行);e2e 脚本对 .bat 直接 spawn 的 `--version` 展示会失败(spawn EINVAL),install.ts adopt 探测走 cmd /c 才是权威路径。
+- **待用户走查(人工项)**:①商店页 12 工具(gradle/go/sqlite 新增)可见、版本列表不爆表;②真装一次 Gradle 或 Go → 设为当前 → 新开终端验 `gradle -v`(需 JAVA_HOME)/`go version`;③接管一个既有 Go/SQLite 目录 → 版本识别;④SQLite 安装 3.52.x(表外)→ 应被 `checksum-unpinned` 拒装。
+
+### F5 未收录工具(2026-09-19 评估归档,收录与否待用户后续发落)
+
+| 工具 | 档 | 结论(实测依据) | 重收录的前置条件 |
+|------|----|------------------|------------------|
+| Tomcat | 困难 | 华为云 apache 镜像真文件(206)+ archive.apache.org `.sha512` 侧车都在,但目录两级嵌套 `tomcat-11/v11.0.2/bin/`,现有 dirIndex 只扫一级 → 需给 catalog.ts 加"两级扫描"(动最敏感的解析核) | 核心 dirIndex 支持父目录前缀;或用户确认只要当前主版本线(单级可扫) |
+| Nginx | 困难 | 国内四镜像无 win 包(TUNA/USTC/阿里/腾讯 404 或缺),仅官方 nginx.org(137KB/s);官方只发 PGP `.asc` 不发哈希 → pinnedHash 持续回填;官方自述 Windows 版"仅开发测试用" | 官方 Windows 版定位改变,或用户接受慢速单源 + 回填负担 |
+| CMake | 困难 | **四个国内镜像全无**(TUNA/USTC/阿里/腾讯 cmake 目录 404;华为云 /cmake/ 已下架为 SPA 兜底页),官方 cmake.org 直连 41KB/s;官方按版本发 `*-SHA-256.txt` 校验齐全 | 出现境内镜像(如 Kitwareware CDN 合作),或用户接受违背"镜像优先"支柱的慢速单源 |
+| Rust | 不收 | 官方/USTC 有 tar.gz + sha256,但解压链要新增 tar.gz 通道,且真正可用还需 MSVC Build Tools/MinGW——超出"单 zip 解压即用"模型 | rustup 发行方案专项设计(v1.x 路线图),单包收录无意义 |
+
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。
 - **待定项**:产品正式名称与图标(《产品文档.md》§13)——影响 NSIS 图标与应用名,出正式版本前问用户。
@@ -98,7 +118,7 @@
 ## 每轮验收模板(任何修复/功能轮收尾照抄)
 ```bash
 pnpm typecheck        # 两段干净
-pnpm test             # 全绿(基线 111 例,新测试只增不减)
+pnpm test             # 全绿(基线 170 例,新测试只增不减)
 pnpm dist             # 动了 catalog/打包链/主进程时:四段全绿,release/ 出新包
 ```
 每轮 commit 信息注明项编号(S1/S2/S3/B#/F#/C#),安全类改动修完建议复跑 `/security-review`。

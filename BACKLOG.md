@@ -2,10 +2,10 @@
 
 > 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成(F5 于 2026-09-20 用户确认走查通过,远端 main/tag
-> `v1.3.0`/Release(prerelease)均已就位,本轮 = 纯文档收尾)。当前待办 = P2 表里 C1/C2 两项用户改进
-> (《功能改进建议.md》2026-09-20 新增;C2 边界与 F3 现口径冲突,接单前须先与用户确认)。新会话先读
-> `CLAUDE.md` 启动指引,再回本表。**
+> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成。C1/C2(《功能改进建议.md》2026-09-20 两条)已实现并
+> 自测全绿(2026-09-20,commit `3509542`,门禁 173/173,`/security-review` 复跑 1 Medium 已修,`pnpm dist`
+> 出包含 fail-closed 修复,SHA-256 `ECB71B…835B`)。当前待办 = 用户走查 C1/C2 → 开 VPN push → 定发版方式
+> (本地新包哈希 ≠ Release v1.3.0 附件哈希,见「C 轮实况」)。新会话先读 `CLAUDE.md` 启动指引,再回本表。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -63,8 +63,8 @@
 | F3 | 功能 | **系统环境变量开关(默认关)** —— 设置页新增开关,开启(二次确认)后环境页出现「系统环境变量(HKLM)」区:可**增/改/删非 Windows 内置**的系统变量;内置变量(含系统 `Path`)一律只读拒改拒删;全部写入走 §7.2 四步 + 系统级快照可回滚。 | ✅ 完成 2026-09-14 · commit `8793ecb` |
 | F4 | 功能 | **一星工具批量收录**(《常用工具列表.md》★ 档去重后 6 个):Git(MinGit)/VS Code/Python(embed)/IDEA CE/PyCharm CE/DBeaver。范围 2026-09-16 已与用户拍板:①校验和缺口工具(Python/DBeaver等)走 **pinned 固定哈希**方案(S1 红线不动摇);②**浏览器本批跳过**(Chrome 备选方案=f官方 Chrome for Testing,Firefox 官方无 zip,均延后);③Postman 版本 API 残缺(下载 URL 404/列表空)→ 延后。核心含 `catalog.ts` 泛化:jsonApi/latestRedirect 发现、rawVersion 自然序、aliases、maxVersions、pinned/discoveredSidecar 校验、binName 布局、空 rootDir 平铺。验收:六个工具商店可见、安装(校验不缺口)、切换/卸载/接管齐,门禁全绿 + **四个 pinned 工具真下载 e2e(已过:python/git/dbeaver/vscode)**。 | ✅ 完成并推送 2026-09-17 · commit `fef8a39` |
 | F5 | 功能 | **二星工具第一批收录**(《功能改进建议.md》2026-09-19:评估 ★★☆☆☆ 两节后用户拍板按"轻松档"先收 3 个):**Gradle / Go / SQLite**。核心扩展:`listScan.shape` 增 `array`(Go dl API:versionRegex 剥 `go` 前缀 + pick 键选 win-amd64 资产)+ checksum kind 增 `discoveredInline`(API 内嵌 sha256,adoptiumApi 同范式)+ listKind 增 `regexPage`(sqlite.org download.html 的 PRODUCT 数据行)。源:Gradle=华为云(170 版)/腾讯云 + 官方 sha256 侧车(跨域);Go=golang.google.cn(1.6MB/s)+ 阿里云镜像(171 版);SQLite=官方单源 ~6MB + pinnedHash(3.53.4 真哈希已回填)。**真机 e2e 三工具全过**(gradle 9.7.1 需 JAVA_HOME 属工具常识;go `go version go1.27.1`、sqlite `3.53.4` 实测)。验收:三工具商店可见/版本列表/安装/切换/接管齐 + 门禁全绿(170/170)。**未收录的评估结论见下方「F5 未收录工具」节,Tomcat/Nginx/CMake/Rust 延后待用户发落。** | ✅ 完成并 Release 2026-09-20(走查通过;远端 `e5bd6c5` + tag `v1.3.0` + Release prerelease,详见 F5 实况收尾段) |
-| C1 | 改进 | **设置页移除「镜像源优先级」区块**(《功能改进建议.md》2026-09-20 第 1 条):用户已可在商店版本行自选源,此区随工具增多挤压设置页空间。范围:去 Settings 页该区块展示(涉及文件先核 `Settings.vue` 与 settings 存储字段是否保留);验收=设置页无此区、商店选源不受影响、门禁 170 只增不减。 | ⬜ 待接单 |
-| C2 | 改进 | **环境页「系统环境变量(HKLM)」区瘦身**(同文档第 2 条):该区占空间过大;用户只要管系统 Path(展示与写入都只针对 Path),其他系统变量不展示。**⚠ 边界待确认(与 F3 现口径相反)**——F3 现设计是"系统 Path 永远只读、只开放非内置自定义变量增删改";接单前须问清:是把该区改成"仅系统 Path 条目级管理(增删改 Path 条目,弃自定义变量列表)",还是"保留自定义变量功能、只收掉默认展示"? | ⬜ 待接单(边界不清) |
+| C1 | 改进 | **设置页移除「镜像源优先级」区块**(《功能改进建议.md》2026-09-20 第 1 条):用户已可在商店版本行自选源,此区随工具增多挤压设置页空间。范围(实现时定):UI 整段移除 + `SettingsView.sourcePriority`/`ToolCardView.sourceIds` 契约删除 + prefsFor 停读;**ghproxy 加速器前缀保留**(挪入网络卡,风险登记 §12 要求可换/可关);catalog.ts 的 priority 通用原语与单测不动。 | ✅ 已实现 2026-09-20 · commit `3509542`(待走查) |
+| C2 | 改进 | **环境页「系统环境变量(HKLM)」区 → 方向 A 已拍板(2026-09-20 用户)**:区改名「系统 PATH(HKLM)」,只列系统 PATH 条目(可看);**可追加一条**(开关开+管理员);**不提供修改/删除**(用户到 Windows 系统设置手动做);F3 的自定义变量表与增删改、`env:system-set/remove` 通道、core `applySystemVarSet/Remove` 全下线,新增 `applySystemPathAdd` + `env:system-path-add`;安全复查发现并修复 1 Medium(readSystemVars 降级空表可致单条覆写整个 PATH → fail-closed)。 | ✅ 已实现 2026-09-20 · commit `3509542`(待走查) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -105,6 +105,29 @@
   - 已知边界:Go 下载走官方中国站 + 阿里云,无华为云;SQLite 仅官方源(~130KB/s,包小可接受)且 pinned 只留最新数版,发新版例行回填;Gradle adopt 探测的 exec 兜底依赖 JAVA_HOME(链路上 fileGlob/dirName 两档零依赖先行);e2e 脚本对 .bat 直接 spawn 的 `--version` 展示会失败(spawn EINVAL),install.ts adopt 探测走 cmd /c 才是权威路径。
 - **走查项(人工)**:①商店页 12 工具(gradle/go/sqlite 新增)可见、版本列表不爆表;②真装一次 Gradle 或 Go → 设为当前 → 新开终端验 `gradle -v`(需 JAVA_HOME)/`go version`;③接管一个既有 Go/SQLite 目录 → 版本识别;④SQLite 安装 3.52.x(表外)→ 应被 `checksum-unpinned` 拒装。
 - **✅ 收尾实况(2026-09-20)**:用户确认走查通过。核对发现 push 与 Release 上一会话已完成:远端 `main` = 轻量 tag `v1.3.0` = `e5bd6c5`;GitHub Release **v1.3.0(prerelease)** 附件 `devkit-setup-0.4.0.exe` 85,185,215 B,正文 SHA-256 `BA0682E6…FA089` 与本机 `Get-FileHash` 一致;本地 9 个 tag 与远端全同步。**F5 关闭,本轮提交 = 纯文档回写。** 另登记 C1/C2(《功能改进建议.md》2026-09-20 两条,C2 边界待用户拍板)。
+
+### C 轮实况(2026-09-20:C1+C2 一轮交付 —— 用户指示"两项都做,C2 选方向 A;自测通过后停下等开 VPN 再推")
+
+- **范围**:C1 设置页「镜像源优先级」整段下线(ghproxy 前缀挪网络卡保留);C2 环境页 HKLM 区收窄为
+  "系统 PATH 只看 + 只追加一条,删改去系统手动做"(用户原话口径,已记 BACKLOG 表)。
+- **已实现(commit `3509542`)**:core `applySystemPathAdd`(闸门→`assertSystemPathEntry`→幂等 merge 只增不删→
+  scope=system 快照→`Set-SystemEnv Path`→失败还原)/`applySystemVarSet·Remove` 与 `assertSystemVarName` 下线/
+  通道 `env:system-set·remove`→`env:system-path-add`/`env:system-list` 只回 PATH 条目/契约 `SettingsView` 去
+  `sourcePriority`、`ToolCardView` 去 `sourceIds`;设置页开关与两处弹窗文案同步改口径。
+- **安全复查(`/security-review` 复跑,因动系统级写口)**:1 Medium **已修** —— `readSystemVars()` 解析失败
+  曾降级空表,会让"追加"以单条**覆写整个系统 PATH** 且备份为空(回滚失真);改 fail-closed:不可解析抛
+  `system-read`、零值空表拒写 `system-path-read`(§7.1.1 新铁律,勿回退)。其余核查干净(psLiteral 无逃逸、
+  闸门无绕过路径、restoreTo/S2/S3 既有保护未削弱,攻击面比 F3 更窄)。
+- **门禁**:`pnpm typecheck` 两段干净;`pnpm test` **173/173**(基线 170 只增不减);`pnpm dist` 四段全绿
+  重出 `release/devkit-setup-0.4.0.exe`,SHA-256 `ECB71B…835B`。
+- **⚠ 发版决策待定(走查时拍板)**:本地 0.4.0 包已含 C 轮改动,与 GitHub Release v1.3.0 附件(旧哈希
+  `BA0682…A089`)**不再同源**。两个选项:①bump `0.4.1` → tag → 按 R1 配方新发一个 Release(推荐,历史干净);
+  ②只替换 v1.3.0 附件(哈希/名称要全部改正文,易与已下载者混淆)。
+- **待用户走查(人工项)**:①设置页:优先级区消失、网络卡含 ghproxy 三态、开关卡改名「系统 PATH(HKLM,高级,默认关闭)」;
+  ②环境页:「系统 PATH(HKLM)」区展示真实系统 PATH 条目列表(默认只读);③开开关(**管理员运行** DevKit)→
+  [＋追加一条] 一个真实目录(如 `C:\tmp\devkit-test`)→ 检测表/该区即时出现新条目 → 新开终端 `where` 可见;
+  ④同条目重复追加 → 提示零写入;⑤到 Windows 系统设置删除该测试条目(本工具不提供删,预期行为);
+  ⑥商店版本行选源下载一次(确认 C1 移除未影响选源)。走查通过 → 开 VPN → push(本轮提交 `3509542` + 文档)。
 
 ### F5 未收录工具(2026-09-19 评估归档,收录与否待用户后续发落)
 

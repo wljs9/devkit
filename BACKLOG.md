@@ -1,10 +1,11 @@
 # DevKit — 待办与流程清单(新会话按此继续)
 
-> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记)。
+> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已发布;F1/F2/F3/F4 已完成;F5 二星第一批(Go/Gradle/SQLite)**已实现并真机
-> e2e 通过(2026-09-19,170 例绿 + 三工具真装全过),`CLAUDE.md` 已同步。当前待办 = P2 表里 F5 剩余
-> 走查收尾 + 用户后续清单(新会话先读 `CLAUDE.md` 启动指引,再回本表)。**
+> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成(F5 于 2026-09-20 用户确认走查通过,远端 main/tag
+> `v1.3.0`/Release(prerelease)均已就位,本轮 = 纯文档收尾)。当前待办 = P2 表里 C1/C2 两项用户改进
+> (《功能改进建议.md》2026-09-20 新增;C2 边界与 F3 现口径冲突,接单前须先与用户确认)。新会话先读
+> `CLAUDE.md` 启动指引,再回本表。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -61,7 +62,9 @@
 | F2 | 功能 | **受管条目并入 PATH 检测表** —— 环境页「外部条目区」不再过滤掉本工具 3 条受管条目,改为同表展示并打「受管」标签(不可勾删),让检测列表一条不漏。 | ✅ 完成 2026-09-14 · commit `ff6cc50` |
 | F3 | 功能 | **系统环境变量开关(默认关)** —— 设置页新增开关,开启(二次确认)后环境页出现「系统环境变量(HKLM)」区:可**增/改/删非 Windows 内置**的系统变量;内置变量(含系统 `Path`)一律只读拒改拒删;全部写入走 §7.2 四步 + 系统级快照可回滚。 | ✅ 完成 2026-09-14 · commit `8793ecb` |
 | F4 | 功能 | **一星工具批量收录**(《常用工具列表.md》★ 档去重后 6 个):Git(MinGit)/VS Code/Python(embed)/IDEA CE/PyCharm CE/DBeaver。范围 2026-09-16 已与用户拍板:①校验和缺口工具(Python/DBeaver等)走 **pinned 固定哈希**方案(S1 红线不动摇);②**浏览器本批跳过**(Chrome 备选方案=f官方 Chrome for Testing,Firefox 官方无 zip,均延后);③Postman 版本 API 残缺(下载 URL 404/列表空)→ 延后。核心含 `catalog.ts` 泛化:jsonApi/latestRedirect 发现、rawVersion 自然序、aliases、maxVersions、pinned/discoveredSidecar 校验、binName 布局、空 rootDir 平铺。验收:六个工具商店可见、安装(校验不缺口)、切换/卸载/接管齐,门禁全绿 + **四个 pinned 工具真下载 e2e(已过:python/git/dbeaver/vscode)**。 | ✅ 完成并推送 2026-09-17 · commit `fef8a39` |
-| F5 | 功能 | **二星工具第一批收录**(《功能改进建议.md》2026-09-19:评估 ★★☆☆☆ 两节后用户拍板按"轻松档"先收 3 个):**Gradle / Go / SQLite**。核心扩展:`listScan.shape` 增 `array`(Go dl API:versionRegex 剥 `go` 前缀 + pick 键选 win-amd64 资产)+ checksum kind 增 `discoveredInline`(API 内嵌 sha256,adoptiumApi 同范式)+ listKind 增 `regexPage`(sqlite.org download.html 的 PRODUCT 数据行)。源:Gradle=华为云(170 版)/腾讯云 + 官方 sha256 侧车(跨域);Go=golang.google.cn(1.6MB/s)+ 阿里云镜像(171 版);SQLite=官方单源 ~6MB + pinnedHash(3.53.4 真哈希已回填)。**真机 e2e 三工具全过**(gradle 9.7.1 需 JAVA_HOME 属工具常识;go `go version go1.27.1`、sqlite `3.53.4` 实测)。验收:三工具商店可见/版本列表/安装/切换/接管齐 + 门禁全绿(170/170)。**未收录的评估结论见下方「F5 未收录工具」节,Tomcat/Nginx/CMake/Rust 延后待用户发落。** | ✅ 已实现(核心+catalog+真机 e2e,2026-09-19);剩余=走查(见 F5 实况) |
+| F5 | 功能 | **二星工具第一批收录**(《功能改进建议.md》2026-09-19:评估 ★★☆☆☆ 两节后用户拍板按"轻松档"先收 3 个):**Gradle / Go / SQLite**。核心扩展:`listScan.shape` 增 `array`(Go dl API:versionRegex 剥 `go` 前缀 + pick 键选 win-amd64 资产)+ checksum kind 增 `discoveredInline`(API 内嵌 sha256,adoptiumApi 同范式)+ listKind 增 `regexPage`(sqlite.org download.html 的 PRODUCT 数据行)。源:Gradle=华为云(170 版)/腾讯云 + 官方 sha256 侧车(跨域);Go=golang.google.cn(1.6MB/s)+ 阿里云镜像(171 版);SQLite=官方单源 ~6MB + pinnedHash(3.53.4 真哈希已回填)。**真机 e2e 三工具全过**(gradle 9.7.1 需 JAVA_HOME 属工具常识;go `go version go1.27.1`、sqlite `3.53.4` 实测)。验收:三工具商店可见/版本列表/安装/切换/接管齐 + 门禁全绿(170/170)。**未收录的评估结论见下方「F5 未收录工具」节,Tomcat/Nginx/CMake/Rust 延后待用户发落。** | ✅ 完成并 Release 2026-09-20(走查通过;远端 `e5bd6c5` + tag `v1.3.0` + Release prerelease,详见 F5 实况收尾段) |
+| C1 | 改进 | **设置页移除「镜像源优先级」区块**(《功能改进建议.md》2026-09-20 第 1 条):用户已可在商店版本行自选源,此区随工具增多挤压设置页空间。范围:去 Settings 页该区块展示(涉及文件先核 `Settings.vue` 与 settings 存储字段是否保留);验收=设置页无此区、商店选源不受影响、门禁 170 只增不减。 | ⬜ 待接单 |
+| C2 | 改进 | **环境页「系统环境变量(HKLM)」区瘦身**(同文档第 2 条):该区占空间过大;用户只要管系统 Path(展示与写入都只针对 Path),其他系统变量不展示。**⚠ 边界待确认(与 F3 现口径相反)**——F3 现设计是"系统 Path 永远只读、只开放非内置自定义变量增删改";接单前须问清:是把该区改成"仅系统 Path 条目级管理(增删改 Path 条目,弃自定义变量列表)",还是"保留自定义变量功能、只收掉默认展示"? | ⬜ 待接单(边界不清) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -92,7 +95,7 @@
   - 已知边界(如实):Git/VS Code 镜像只留最新稳定版;VS Code 新 CDN 包=扁平根+{commit}/ 运行时目录(安装按 flat 整树);python embed 无 pip/tkinter(可 `python -m ensurepip`);IDEA/PyCharm adopt 走 build.txt 的 IC-/PC- build(≠版本号,仅标签);`--version` 仅对 GUI exe 直接 spawn 不可用(本工具用 openPath)。
 - **待用户走查(人工项)**:①商店页六个工具均可见、版本列表不爆表;②真装一次 Python 或 Git → 设为当前 → 新开终端验 `python`/`git`;③接管真实既有 VS Code/IDEA 目录→ 版本识别;④安装一个 unpinned 版本(如 python 3.14.3)→ 应被 `checksum-unpinned` 拒装并有可读提示。**走查通过后才可推送**;走查前保持"已实现"状态,推前等用户开 VPN。
 
-### F5 实况(2026-09-19:评估 → 实现 → 三工具真机 e2e 全过;等待用户走查)
+### F5 实况(2026-09-19:评估 → 实现 → 三工具真机 e2e 全过;2026-09-20 走查通过,收尾关闭)
 
 - **输入文档**:用户 2026-09-19 《功能改进建议.md》"评估二星的工具哪一些合适装上去";评估结论已口头汇报(轻松档=Gradle/SQLite/Go,困难档=Tomcat/Nginx/CMake/Rust),用户拍板"按你的建议执行,先做第一批,未收录的也记录回写文档,完工推 GitHub(连带 release),推送前等开 VPN"。
 - **已实现(commit:`bcfd2be` 核心+三 catalog+测试)**:
@@ -100,7 +103,8 @@
   - 源定稿(2026-09-19 实测):**Gradle**=华为云 dirIndex 直链(170 版,PK 魔数 + Range 206)/腾讯云同形 + 官方 `services.gradle.org/.sha256` 裸哈希(华为云同名 sidecar 与官方 9.7.1 抽验一致;install.ts orderChecksumUrls 自动跨域背书);**Go**=`golang.google.cn/dl/?mode=json&include=all`(365 版全带 win-amd64 sha256+size,zip Range 206、1MB 采样 1.6MB/s)+ 阿里云镜像(171 版直链;华为云 /golang/ 401 已弃);**SQLite**=官方 download.html 单源(华为云 /sqlite/ 已下架为 SPA 兜底页、TUNA/阿里/腾讯无)+ pinnedHash。
   - e2e 真机:sqlite(3.53.4,pinned 校验命中,平铺根,`sqlite3 --version` 实测 3.53.4)/ go(1.27.1,75MB 真下载,API 内嵌 sha256 校验命中,VERSION 文件探测 via=releaseFile,`go version` 实测 go1.27.1 windows/amd64)/ gradle(9.7.1,151MB 真下载,官方 sha256 侧车校验命中,lib\gradle-core-*.jar 探测 via=fileGlob,`gradle --version` 实测 Gradle 9.7.1 —— 需本机 JAVA_HOME 属工具常识非收录缺陷)。
   - 已知边界:Go 下载走官方中国站 + 阿里云,无华为云;SQLite 仅官方源(~130KB/s,包小可接受)且 pinned 只留最新数版,发新版例行回填;Gradle adopt 探测的 exec 兜底依赖 JAVA_HOME(链路上 fileGlob/dirName 两档零依赖先行);e2e 脚本对 .bat 直接 spawn 的 `--version` 展示会失败(spawn EINVAL),install.ts adopt 探测走 cmd /c 才是权威路径。
-- **待用户走查(人工项)**:①商店页 12 工具(gradle/go/sqlite 新增)可见、版本列表不爆表;②真装一次 Gradle 或 Go → 设为当前 → 新开终端验 `gradle -v`(需 JAVA_HOME)/`go version`;③接管一个既有 Go/SQLite 目录 → 版本识别;④SQLite 安装 3.52.x(表外)→ 应被 `checksum-unpinned` 拒装。
+- **走查项(人工)**:①商店页 12 工具(gradle/go/sqlite 新增)可见、版本列表不爆表;②真装一次 Gradle 或 Go → 设为当前 → 新开终端验 `gradle -v`(需 JAVA_HOME)/`go version`;③接管一个既有 Go/SQLite 目录 → 版本识别;④SQLite 安装 3.52.x(表外)→ 应被 `checksum-unpinned` 拒装。
+- **✅ 收尾实况(2026-09-20)**:用户确认走查通过。核对发现 push 与 Release 上一会话已完成:远端 `main` = 轻量 tag `v1.3.0` = `e5bd6c5`;GitHub Release **v1.3.0(prerelease)** 附件 `devkit-setup-0.4.0.exe` 85,185,215 B,正文 SHA-256 `BA0682E6…FA089` 与本机 `Get-FileHash` 一致;本地 9 个 tag 与远端全同步。**F5 关闭,本轮提交 = 纯文档回写。** 另登记 C1/C2(《功能改进建议.md》2026-09-20 两条,C2 边界待用户拍板)。
 
 ### F5 未收录工具(2026-09-19 评估归档,收录与否待用户后续发落)
 

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Channel, PushChannel } from '../src/shared/ipc';
-import type { DevkitApi, DownloadProgressEvent, EnvAuditView, InstallView, SystemEnvView } from '../src/shared/ipc';
+import type { DevkitApi, DownloadProgressEvent, EnvAuditView, InstallView, SettingsView, SystemEnvView, ToolCardView } from '../src/shared/ipc';
 import type { InstallRecord } from '../src/main/core/store';
 
 // 以 (keyof T)[] 标注:字段名漂移/笔误会在【编译期】报错 —— 这才是"防契约漂移"的门禁本意。
@@ -50,31 +50,42 @@ describe('§8 通道全集', () => {
     }
   });
 
-  it('★ F3 新增通道(系统级环境变量)全部在册', () => {
-    for (const c of ['env:system-list', 'env:system-set', 'env:system-remove']) {
+  it('★ C2 通道口径:系统级仅 list + path-add 两通道;F3 的 set/remove 已下线(守卫其不复活)', () => {
+    for (const c of ['env:system-list', 'env:system-path-add']) {
       expect(Object.values(Channel), `缺通道 ${c}`).toContain(c);
     }
+    const gone = Object.values(Channel) as string[];
+    expect(gone).not.toContain('env:system-set');
+    expect(gone).not.toContain('env:system-remove');
+    // api 形状同步:DevkitApi 上不再有 envSystemSet/Remove
+    expect('envSystemSet' in ({} as DevkitApi)).toBe(false);
+    expect('envSystemRemove' in ({} as DevkitApi)).toBe(false);
   });
 
-  it('★ F3 系统变量 DTO 可 JSON 往返;开关状态默认按关处理', () => {
-    const view: SystemEnvView = {
-      enabled: false,
-      elevated: false,
-      rows: [
-        { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32', protected: true },
-        { name: 'JAVA_HOME', kind: 'ExpandString', value: 'C:\\jdk-21', protected: false },
-      ],
-    };
+  it('★ C2 SystemEnvView DTO 可 JSON 往返(entries:string[]|null);path-add 单参守卫', () => {
+    const view: SystemEnvView = { enabled: false, elevated: false, entries: ['C:\\Windows\\system32', 'D:\\tools\\bin'] };
     expect(JSON.parse(JSON.stringify(view))).toEqual(view);
-    // 契约签名守卫:三个方法各收一个 DTO
-    const set: DevkitApi['envSystemSet'] = (req) => Promise.resolve({ ok: true as const, data: null });
-    const rm: DevkitApi['envSystemRemove'] = (req) => Promise.resolve({ ok: true as const, data: null });
-    expect(set.length).toBe(1);
-    expect(rm.length).toBe(1);
-    return Promise.all([
-      set({ name: 'JAVA_HOME', value: 'C:\\jdk-21', kind: 'ExpandString' }).then((r) => expect(r).toEqual({ ok: true, data: null })),
-      rm({ name: 'JAVA_HOME' }).then((r) => expect(r).toEqual({ ok: true, data: null })),
-    ]).then(() => undefined);
+    const viewNull: SystemEnvView = { enabled: true, elevated: false, entries: null };
+    expect(JSON.parse(JSON.stringify(viewNull))).toEqual(viewNull);
+    const add: DevkitApi['envSystemPathAdd'] = (req) => {
+      expect(req).toEqual({ entry: 'D:\\tools\\bin' });
+      return Promise.resolve({ ok: true as const, data: null });
+    };
+    expect(add.length).toBe(1);
+    return add({ entry: 'D:\\tools\\bin' }).then((r) => {
+      expect(r).toEqual({ ok: true, data: null });
+    });
+  });
+
+  it('★ C1 契约形状:SettingsView 无 sourcePriority、ToolCardView 无 sourceIds(镜像源优先级设置整段下线)', () => {
+    const v: SettingsView = {
+      devRoot: 'D:\\dev', proxy: '', concurrency: 2, sourcePrefixes: {}, cache: null,
+      allowSystemEnv: false, appVersion: '0.4.0', catalogVersion: '2026-09-19T00:00:00.000Z',
+    };
+    expect('sourcePriority' in v).toBe(false);
+    const card: ToolCardView = { id: 'go', displayName: 'Go', installedCount: 1, currentVersion: '1.27.1' };
+    expect('sourceIds' in card).toBe(false);
+    expect(JSON.parse(JSON.stringify(v))).toEqual(v);
   });
 
   it('★ F1 契约签名:installAdopt(tool,dir) / installForget(tool,version) 单参 DTO(编译期守卫)', () => {

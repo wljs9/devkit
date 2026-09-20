@@ -26,8 +26,8 @@ function makeBridge(): DevkitApi {
     envPrune: vi.fn(() => ok({ removed: [], backupFile: null, broadcast: null })),
     envRestore: vi.fn(() => ok(null)),
     historyList: vi.fn(() => ok([])),
-    settingsGet: vi.fn(() => ok({ devRoot: 'D:\\dev', sourcePriority: {}, proxy: '', concurrency: 2, sourcePrefixes: {}, cache: null, appVersion: '0.1.0', catalogVersion: '2026-09-07' })),
-    settingsSet: vi.fn(() => ok({ devRoot: 'D:\\dev', sourcePriority: {}, proxy: '', concurrency: 2, sourcePrefixes: {}, cache: null, appVersion: '0.1.0', catalogVersion: '2026-09-07' })),
+    settingsGet: vi.fn(() => ok({ devRoot: 'D:\\dev', proxy: '', concurrency: 2, sourcePrefixes: {}, cache: null, appVersion: '0.1.0', catalogVersion: '2026-09-07' })),
+    settingsSet: vi.fn(() => ok({ devRoot: 'D:\\dev', proxy: '', concurrency: 2, sourcePrefixes: {}, cache: null, appVersion: '0.1.0', catalogVersion: '2026-09-07' })),
     cacheClear: vi.fn(() => ok({ files: 0, bytes: 0 })),
     setupPreview: vi.fn(() => ok({ devRoot: 'D:\\dev', warnings: [], willAdd: [], javaHome: '', noop: true })),
     setupRun: vi.fn(() => ok({ applied: [], broadcast: 'ok', backupFile: null })),
@@ -68,7 +68,7 @@ describe('App 渲染树冒烟', () => {
   it('环境未接入时顶栏出现黄色提示入口(§4.0)', async () => {
     const b = makeBridge();
     (b.envState as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: { devRoot: null, wired: false, entries: [], backups: [] } });
-    (b.settingsGet as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: { devRoot: 'D:\\dev', sourcePriority: {}, proxy: '', concurrency: 2 } });
+    (b.settingsGet as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: { devRoot: 'D:\\dev', proxy: '', concurrency: 2 } });
     (window as unknown as { devkit: DevkitApi }).devkit = b;
     const router = createRouter({ history: createMemoryHistory(), routes });
     await router.push('/');

@@ -58,7 +58,7 @@ describe('Environment.vue(§4.4)', () => {
           backups: [{ ts: '2026-09-07T10:00:00.000Z', file: 'C:\\appdata\\env_backups\\a.json', names: ['Path'], scope: 'user' as const }],
         }),
       ),
-      envSystemList: vi.fn(() => ok({ enabled: false, elevated: false, rows: [] })),
+      envSystemList: vi.fn(() => ok({ enabled: false, elevated: false, entries: ['C:\\Windows\\system32'] })),
     });
     const text = w.text();
     expect(text).toContain('PATH 共 23 条,失效 2,重复 1');
@@ -88,7 +88,7 @@ describe('Environment.vue(§4.4)', () => {
         } satisfies EnvAuditView),
       ),
       envState: vi.fn(() => ok({ devRoot: 'D:\\dev', wired: true, entries: [], backups: [] })),
-      envSystemList: vi.fn(() => ok({ enabled: false, elevated: false, rows: [] })),
+      envSystemList: vi.fn(() => ok({ enabled: false, elevated: false, entries: ['C:\\Windows\\system32'] })),
     });
     const text = w.text();
     expect(text).toContain('PATH 条目体检(用户 + 系统)'); // 原「外部条目区」已升格为全量表
@@ -100,37 +100,35 @@ describe('Environment.vue(§4.4)', () => {
     w.unmount();
   });
 
-  it('★F3 系统环境变量区:开关关时只读引导 + 内置变量标「内置·只读」;开时给增改删入口', async () => {
+  it('★C2 系统 PATH(HKLM)区:只看 + 只追加 —— 开关关给引导,开+管理员给「追加一条」;不再列变量表/无删改', async () => {
     const { default: View } = await import('../../src/renderer/src/views/Environment.vue');
-    const rows = [
-      { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32', protected: true },
-      { name: 'JAVA_HOME', kind: 'ExpandString', value: 'C:\\Program Files\\Java\\jdk-21', protected: false },
-    ];
+    const entries = ['C:\\Windows\\system32', 'C:\\Windows'];
     const bridge = (sysv: { enabled: boolean; elevated: boolean }) => ({
       envAudit: vi.fn(() => ok({
         devRoot: 'D:\\dev', managed: [], rows: [], systemReadable: true, summary: { total: 0, missing: 0, duplicates: 0 },
       } satisfies EnvAuditView)),
       envState: vi.fn(() => ok({ devRoot: 'D:\\dev', wired: true, entries: [], backups: [] })),
-      envSystemList: vi.fn(() => ok({ ...sysv, rows })),
+      envSystemList: vi.fn(() => ok({ ...sysv, entries })),
     });
 
-    // 关:只读 + 引导去设置;内置项与自定义项都列出,但内置项标「内置·只读」
+    // 关:条目照常展示 + 引导去设置;不给追加入口(闸门在 core,UI 同步收口)
     const off = await mountView(View, bridge({ enabled: false, elevated: false }));
     const offText = off.text();
-    expect(offText).toContain('系统环境变量(HKLM)');
+    expect(offText).toContain('系统 PATH(HKLM)');
     expect(offText).toContain('写入已关闭(默认)');
-    expect(offText).toContain('设置 → 系统环境变量');
-    expect(offText).toContain('内置·只读');
-    expect(offText).toContain('JAVA_HOME');
-    expect(offText).not.toContain('＋ 新增系统变量'); // 开关关时不给写入入口
+    expect(offText).toContain('设置 → 系统 PATH(HKLM)');
+    expect(offText).toContain('C:\\Windows\\system32'); // 条目列表(替代旧变量全表)
+    expect(offText).toContain('Windows「设置 → 系统环境变量」'); // 删改去系统手动做
+    expect(offText).not.toContain('＋ 追加一条'); // 开关关时不给写入入口
+    expect(offText).not.toContain('内置·只读'); // 旧变量表整段下线
     off.unmount();
 
-    // 开 + 非管理员:给入口但明确警告写入会被拒
+    // 开 + 非管理员:给追加入口但明确警告写入会被拒
     const on = await mountView(View, bridge({ enabled: true, elevated: false }));
     const onText = on.text();
-    expect(onText).toContain('写入已开启');
+    expect(onText).toContain('追加已开启');
     expect(onText).toContain('非管理员');
-    expect(onText).toContain('＋ 新增系统变量');
+    expect(onText).toContain('＋ 追加一条');
     on.unmount();
   });
 });
@@ -157,26 +155,29 @@ describe('History.vue(§4.5)', () => {
 });
 
 describe('Settings.vue(§4.6)', () => {
-  it('六区块渲染:源优先级列表、代理前缀三态、★F3 系统变量开关(默认关)、缓存占用、关于版本', async () => {
+  it('★C1+C2 五区块渲染:「镜像源优先级」整段移除、ghproxy 前缀三态保留、系统 PATH 开关(默认关)、缓存、关于', async () => {
     const { default: View } = await import('../../src/renderer/src/views/Settings.vue');
     const w = await mountView(View, {
       settingsGet: vi.fn(() =>
         ok({
-          devRoot: 'D:\\dev', sourcePriority: {}, proxy: '', concurrency: 2,
+          devRoot: 'D:\\dev', proxy: '', concurrency: 2,
           sourcePrefixes: {}, cache: { dir: 'D:\\dev\\cache', files: 2, bytes: 1048576 * 3 },
           appVersion: '0.1.0', catalogVersion: '2026-09-07T00:00:00.000Z', allowSystemEnv: false,
         }),
       ),
-      catalogList: vi.fn(() => ok([{ id: 'jdk', displayName: 'JDK', installedCount: 0, currentVersion: null, sourceIds: ['ustc-latest', 'ghproxy', 'github-direct'] }])),
     });
     const text = w.text();
-    expect(text).toContain('镜像源优先级');
-    expect(text).toContain('ustc-latest');
-    expect(text).toContain('ghproxy');
+    // C1:优先级区块与其数据源彻底消失(Settings 不再拉 catalogList)
+    expect(text).not.toContain('镜像源优先级');
+    expect(text).not.toContain('每工具源按序即优先');
+    // 加速器前缀挪入网络卡,三态选择器仍在(风险登记 §12)
+    expect(text).toContain('GitHub 加速器前缀');
     expect(text).toContain('目录默认(ghfast.top)');
-    expect(text).toContain('系统环境变量(高级,默认关闭)'); // ★F3
-    expect(text).toContain('Windows 内置变量与系统 Path 始终只读');
-    expect(w.findAll('.n-switch').length).toBe(1); // 唯一的开关就是系统变量写开关
+    // C2:开关卡改名并给出"只追加、不删改"口径;旧的"内置变量只读"表述随 F3 语义一起下线
+    expect(text).toContain('系统 PATH(HKLM,高级,默认关闭)');
+    expect(text).toContain('追加条目');
+    expect(text).not.toContain('Windows 内置变量与系统 Path 始终只读');
+    expect(w.findAll('.n-switch').length).toBe(1); // 唯一的开关就是系统 PATH 写开关
     expect(text).toContain('D:\\dev\\cache');
     expect(text).toContain('3.0 MB');
     expect(text).toContain('DevKit v0.1.0');

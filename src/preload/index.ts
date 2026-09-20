@@ -27,8 +27,7 @@ const api: DevkitApi = {
   envPrune: (req) => ipcRenderer.invoke(Channel.EnvPrune, req),
   envRestore: (req) => ipcRenderer.invoke(Channel.EnvRestore, req), // M2 遗留:漏传 req,env:restore 曾恒失败 —— M3 接通时修复
   envSystemList: () => ipcRenderer.invoke(Channel.EnvSystemList),
-  envSystemSet: (req) => ipcRenderer.invoke(Channel.EnvSystemSet, req),
-  envSystemRemove: (req) => ipcRenderer.invoke(Channel.EnvSystemRemove, req),
+  envSystemPathAdd: (req) => ipcRenderer.invoke(Channel.EnvSystemPathAdd, req),
 
   historyList: (req) => ipcRenderer.invoke(Channel.HistoryList, req),
 

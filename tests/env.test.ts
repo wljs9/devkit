@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EnvService, SANDBOX_REG_KEY, SYSTEM_REG_KEY, encodePowerShellCommand, psLiteral, type EnvApplyResult, type EnvVar, type ExecFileFn } from '../src/main/core/env';
+import { EnvService, SANDBOX_REG_KEY, SYSTEM_REG_KEY, assertSystemPathEntry, encodePowerShellCommand, psLiteral, type EnvApplyResult, type EnvVar, type ExecFileFn } from '../src/main/core/env';
 import { envPlan } from '../src/main/core/paths';
 
 const FAKE_PS = '# fake env.ps1 for mock tests\n';
@@ -240,8 +240,8 @@ describe('restoreBackup', () => {
   });
 });
 
-// ---- ★F3 系统级(HKLM):闸门 / 保护名单 / 快照与回滚(全部 mock,不碰真实 HKLM) ----
-describe('★F3 系统环境变量写入(默认关 → 保护名单 → 四步)', () => {
+// ---- ★F3 引入 → ★C2 收窄:系统级(HKLM)只剩"系统 PATH 追加一条";闸门 / 快照与回滚(全 mock,不碰真实 HKLM) ----
+describe('★C2 系统 PATH 写入(默认关 → 条目校验 → 幂等追加四步)', () => {
   const SYS: EnvVar[] = [
     { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows\\system32' },
     { name: 'SystemRoot', kind: 'String', value: 'C:\\Windows' },
@@ -250,40 +250,32 @@ describe('★F3 系统环境变量写入(默认关 → 保护名单 → 四步)'
   const svcSys = (fn: ExecFileFn, allow: boolean) => new EnvService({ userDataDir: userData, execFile: fn, psScript: FAKE_PS, allowSystem: () => allow });
   const sysReads = (rows: EnvVar[]) => (c: string) => (c.includes('Get-SystemEnv') ? readRows(rows) : 'OK\nBROADCAST_OK');
 
-  it('闸门默认关闭(未注入 allowSystem):写入/删除一律拒,且一次 PowerShell 都不发', async () => {
+  it('闸门默认关闭(未注入 allowSystem):追加一律拒,且一次 PowerShell 都不发', async () => {
     const { calls, fn } = mockExec(() => 'OK');
     const svc = svcWith(fn, userData); // 未注入 allowSystem = 默认关
-    await expect(svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'D:\\jdk', kind: 'ExpandString' })).rejects.toThrowError(/未开启/);
-    await expect(svc.applySystemVarRemove('JAVA_HOME')).rejects.toThrowError(/未开启/);
+    await expect(svc.applySystemPathAdd('D:\\tools\\bin')).rejects.toThrowError(/未开启/);
     expect(calls.length).toBe(0); // 闸门在 core,不靠 UI 自觉
   });
 
-  it('Windows 内置变量保护名单:改/删一律拒(大小写与空白容错),开关开着也不放行', async () => {
-    const { calls, fn } = mockExec(() => 'OK');
-    const svc = svcSys(fn, true);
-    for (const n of ['SystemRoot', 'path', 'TEMP', '  Windir ']) {
-      await expect(svc.applySystemVarSet({ name: n, value: 'x', kind: 'String' })).rejects.toThrowError(/Windows 内置系统变量/);
-      await expect(svc.applySystemVarRemove(n)).rejects.toThrowError(/Windows 内置系统变量/);
+  it('条目校验(assertSystemPathEntry):空 / 相对路径 / 含 ; " 换行 拒;盘符绝对路径与 %VAR% 引用放行', () => {
+    for (const bad of ['', '   ', 'tools\\bin', 'C:\\a;b', 'C:\\a"b', 'C:\\a\nb', '.\\x', 'C:\\', 'C:/']) {
+      expect(() => assertSystemPathEntry(bad)).toThrowError(/system-path-entry|条目/);
     }
-    expect(calls.length).toBe(0); // 名单判定在发 PS 之前
+    expect(assertSystemPathEntry('  C:\\Tools\\bin ')).toBe('C:\\Tools\\bin');
+    expect(assertSystemPathEntry('D:/x')).toBe('D:/x');
+    expect(assertSystemPathEntry('%TOOL_HOME%\\bin')).toBe('%TOOL_HOME%\\bin');
+    expect(assertSystemPathEntry('%TOOL_HOME%')).toBe('%TOOL_HOME%');
   });
 
-  it('变量名校验:空 / 含 = ; % 与空白 → system-var-name', async () => {
-    const { fn } = mockExec(() => 'OK');
-    const svc = svcSys(fn, true);
-    for (const n of ['', '   ', 'A=B', 'A B', 'A%B', 'A;B']) {
-      await expect(svc.applySystemVarSet({ name: n, value: 'x', kind: 'String' })).rejects.toThrowError(/变量名/);
-    }
-  });
-
-  it('正路:快照(scope=system)→ Set-SystemEnv → 广播;快照可被 listBackups 标为系统级', async () => {
+  it('正路:快照(scope=system)→ Set-SystemEnv Path(幂等 merge 只增不删)→ 广播;快照标系统级', async () => {
     const { calls, fn } = mockExec(sysReads(SYS));
     const svc = svcSys(fn, true);
-    const r = await svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'D:\\dev\\current\\jdk', kind: 'ExpandString' });
-    expect(r.changed).toEqual(['JAVA_HOME']);
+    const r = await svc.applySystemPathAdd('D:\\tools\\bin');
+    expect(r.changed).toEqual(['Path']);
+    expect(r.appended).toEqual(['D:\\tools\\bin']);
     expect(r.backupFile).toBeTruthy();
     expect(calls[0]!.calls.trim()).toBe('Get-SystemEnv');
-    expect(calls[1]!.calls).toContain("Set-SystemEnv -Name 'JAVA_HOME' -Value 'D:\\dev\\current\\jdk' -Kind ExpandString");
+    expect(calls[1]!.calls).toContain("Set-SystemEnv -Name 'Path' -Value 'C:\\Windows\\system32;D:\\tools\\bin' -Kind ExpandString");
     expect(calls[1]!.calls).toContain('Publish-EnvChange');
     const bk = JSON.parse(fs.readFileSync(r.backupFile!, 'utf8')) as { scope?: string; regKey: string; rows: EnvVar[] };
     expect(bk.scope).toBe('system');
@@ -292,21 +284,44 @@ describe('★F3 系统环境变量写入(默认关 → 保护名单 → 四步)'
     expect(svc.listBackups()[0]!.scope).toBe('system');
   });
 
-  it('幂等:值/类型都一致 → 零写入零备份(只读一次)', async () => {
-    const { calls, fn } = mockExec(sysReads([{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'X' }]));
+  it('幂等:等值条目已在系统 PATH(忽略大小写/尾分隔符)→ 零写入零备份,只读一次', async () => {
+    const { calls, fn } = mockExec(sysReads(SYS));
     const svc = svcSys(fn, true);
-    expect(await svc.applySystemVarSet({ name: 'java_home', value: 'X', kind: 'ExpandString' })).toEqual({ changed: [], backupFile: null, broadcast: null });
+    expect(await svc.applySystemPathAdd('c:\\windows\\SYSTEM32\\')).toEqual({ changed: [], appended: [], backupFile: null, broadcast: null });
     expect(calls.length).toBe(1);
   });
 
-  it('删除:快照 → Remove-SystemEnv → 广播;本来不存在 → noop', async () => {
-    const { calls, fn } = mockExec(sysReads([{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'X' }]));
+  it('追加只增不删:现值多条目时其余原样保留、顺序不动,新条目落在尾部', async () => {
+    const rows: EnvVar[] = [{ name: 'Path', kind: 'ExpandString', value: 'C:\\A;C:\\B' }];
+    const { calls, fn } = mockExec(sysReads(rows));
     const svc = svcSys(fn, true);
-    const r = await svc.applySystemVarRemove('java_home');
-    expect(r.changed).toEqual(['JAVA_HOME']);
-    expect(calls[1]!.calls).toContain("Remove-SystemEnv -Name 'JAVA_HOME'");
-    const svc2 = svcSys(mockExec(sysReads([])).fn, true);
-    expect(await svc2.applySystemVarRemove('NOPE')).toEqual({ changed: [], backupFile: null, broadcast: null });
+    const r = await svc.applySystemPathAdd('C:\\C');
+    expect(r.appended).toEqual(['C:\\C']);
+    expect(calls[1]!.calls).toContain("-Value 'C:\\A;C:\\B;C:\\C'");
+    expect(calls[1]!.calls).not.toContain('Remove-SystemEnv'); // 本出口永不删
+  });
+
+  it('fail-closed①(安全复查轮):Get-SystemEnv 输出不可解析 → system-read 拒写,一条 Set 都不发', async () => {
+    const { calls, fn } = mockExec((c) => (c.includes('Get-SystemEnv') ? 'not-json-at-all' : 'OK\nBROADCAST_OK'));
+    const svc = svcSys(fn, true);
+    await expect(svc.applySystemPathAdd('D:\\tools\\bin')).rejects.toThrowError(/拒绝按虚假的"空环境"写入/);
+    expect(calls.length).toBe(1); // 只读了,没写
+  });
+
+  it('fail-closed②(安全复查轮):读成功但零值(异常空表)→ system-path-read 拒写,防单条覆写整个 PATH', async () => {
+    const { calls, fn } = mockExec(sysReads([]));
+    const svc = svcSys(fn, true);
+    await expect(svc.applySystemPathAdd('D:\\tools\\bin')).rejects.toThrowError(/拒绝追加以防整体覆写系统 PATH/);
+    expect(calls.length).toBe(1);
+    expect(fs.existsSync(path.join(userData, 'env_backups'))).toBe(false); // 也没产生"空快照"污染回滚池
+  });
+
+  it('HKLM 无 Path 变量(读成功、表非空、仅缺 Path 项 —— 合法缺省):创建 Path,类型取 ExpandString', async () => {
+    const { calls, fn } = mockExec(sysReads([{ name: 'SystemRoot', kind: 'String', value: 'C:\\Windows' }]));
+    const svc = svcSys(fn, true);
+    const r = await svc.applySystemPathAdd('D:\\tools\\bin');
+    expect(r.appended).toEqual(['D:\\tools\\bin']);
+    expect(calls[1]!.calls).toContain("Set-SystemEnv -Name 'Path' -Value 'D:\\tools\\bin' -Kind ExpandString");
   });
 
   it('写入被系统拒(未提权)→ 归一为 system-need-admin,并已尽力用快照还原', async () => {
@@ -316,7 +331,7 @@ describe('★F3 系统环境变量写入(默认关 → 保护名单 → 四步)'
       return 'OK\nBROADCAST_OK';
     });
     const svc = svcSys(fn, true);
-    await expect(svc.applySystemVarSet({ name: 'JAVA_HOME', value: 'X', kind: 'String' })).rejects.toThrowError(/需要管理员权限/);
+    await expect(svc.applySystemPathAdd('D:\\tools\\bin')).rejects.toThrowError(/需要管理员权限/);
     // calls: ①Get-SystemEnv ②Set-SystemEnv(失败) ③Get-SystemEnv(还原前读回) ④还原写(值未漂移则零写)
     expect(calls[1]!.calls).toContain('Set-SystemEnv');
     expect(calls.length).toBeGreaterThanOrEqual(3);

@@ -42,6 +42,11 @@ export interface EnvRemovalResult extends EnvApplyResult {
   removed: string[];
 }
 
+/** ★ C2 applySystemPathAdd 返回:带实际追加的条目(幂等命中时为空数组) */
+export interface EnvPathAddResult extends EnvApplyResult {
+  appended: string[];
+}
+
 /** ★F3 快照作用域:优先显式 scope;老备份按 regKey 反推(SYSTEM_REG_KEY = 系统级) */
 function scopeOfBackup(bk: EnvBackup): EnvScope {
   if (bk?.scope === 'system') return 'system';
@@ -68,10 +73,11 @@ export const SANDBOX_REG_KEY = 'Environment_DevKitTest';
 export const SYSTEM_REG_KEY = 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
 
 /**
- * ★ F3 Windows 内置系统变量保护名单(不可修改、不可删除)—— 系统本体与其他程序依赖其存在,
- * 误删 SystemRoot/ComSpec/TEMP 会把机器搞坏。用户自己新增的系统变量(JAVA_HOME/MAVEN_HOME 等)
- * 不在名单内 → 可增删改(产品文档 §3.1"动系统级必须显式二次确认"由设置开关承担)。
- * 含系统 `Path`:用户已定口径 —— 系统 PATH 条目不在本期开放编辑范围(只读展示)。
+ * ★ F3 Windows 内置系统变量保护名单(不可删除)—— 系统本体与其他程序依赖其存在,
+ * 误删 SystemRoot/ComSpec/TEMP 会把机器搞坏。★C2(方向 A,2026-09-20)起本名单只守一个口:
+ * restoreTo 系统级回滚【永不删除】内置变量;F3 时代的"自定义变量增删改"整段下线。
+ * 含系统 `Path`:C2 口径 —— 系统级唯一写出口是 applySystemPathAdd 的【追加一条】,
+ * 它经 mergePathEntries 只增不减;名单里的 path 继续拦住任何"删除/覆写 Path 变量本身"的路径。
  */
 export const PROTECTED_SYSTEM_VARS: readonly string[] = [
   'allusersprofile', 'appdata', 'commonprogramfiles', 'commonprogramfiles(x86)', 'commonprogramw6432',
@@ -87,12 +93,20 @@ export function isProtectedSystemVar(name: string): boolean {
   return PROTECTED_SYSTEM_VARS.includes(String(name ?? '').trim().toLowerCase());
 }
 
-/** 系统变量名合法性:非空、不含 = ; % 与空白、长度受限(= 是 Windows 保留前缀,%= 展开符) */
-export function assertSystemVarName(name: string): void {
-  const n = String(name ?? '').trim();
-  if (n.length === 0) throw new CoreError('system-var-name', '变量名不能为空');
-  if (n.length > 128) throw new CoreError('system-var-name', `变量名过长(${n.length} > 128):${n}`);
-  if (!/^[^=\s;%]+$/.test(n)) throw new CoreError('system-var-name', `变量名含非法字符(不可含 = ; % 与空白):${n}`);
+/**
+ * ★ C2 系统 PATH 条目合法性:trim → 非空;不含 `;`(PATH 分隔符)与 `"`(Windows 路径禁字符)与换行;
+ * 必须是盘符绝对路径或 `%VAR%` 前缀引用 —— 相对路径在系统 PATH 里语义不定,拒。
+ * 通过校验则返回 trim 后的原文。
+ */
+export function assertSystemPathEntry(entry: string): string {
+  const e = String(entry ?? '').trim();
+  if (e.length === 0) throw new CoreError('system-path-entry', 'PATH 条目不能为空');
+  if (/[;"]/.test(e)) throw new CoreError('system-path-entry', `条目不能含 ; 或 "(PATH 分隔符 / Windows 非法字符):${e}`);
+  if (/[\r\n]/.test(e)) throw new CoreError('system-path-entry', '条目不能含换行');
+  if (!/^[A-Za-z]:[\\/]./.test(e) && !/^%[^%;"]+%(?:[\\/].*)?$/.test(e)) {
+    throw new CoreError('system-path-entry', `条目须为绝对路径(C:\\tools\\bin)或 %VAR% 前缀引用(%TOOL_HOME%\\bin):${e}`);
+  }
+  return e;
 }
 
 /** PS 单引号字面量(EncodedCommand 内再逃逸,双保险) */
@@ -231,12 +245,12 @@ export class EnvService {
     }
   }
 
-  // ---------------------------------------------------------------- ★ F3 系统级(HKLM,2026-09-14)
+  // ---------------------------------------------------------------- ★ F3 系统级(HKLM,2026-09-14)→ ★ C2 收窄为"系统 PATH 追加"
 
   /** 系统级写入门闸:关闭(默认)时任何系统写入一律拒 —— 闸门在 core,不靠 UI 自觉 */
   private assertSystemWritable(): void {
     if (!(this.opts.allowSystem?.() ?? false)) {
-      throw new CoreError('system-write-disabled', '系统环境变量写入未开启:请到「设置 → 系统环境变量」打开开关(默认关闭)');
+      throw new CoreError('system-write-disabled', '系统 PATH 写入未开启:请到「设置 → 系统 PATH(HKLM)」打开开关(默认关闭)');
     }
   }
 
@@ -249,71 +263,53 @@ export class EnvService {
     }
   }
 
-  /** 系统变量全量读取(读不需要管理员;失败按空表降级,由 UI 提示) */
+  /**
+   * 系统变量全量读取(读不需要管理员)。★安全复查轮(C2)fail-closed 改造:
+   * 输出无可解析 JSON 行【不再降级为空表】——本方法只被两条"先读后覆写"的写路径消费
+   * (applySystemPathAdd / restoreTo 系统回滚),把"读坏了"当"真的空"会让
+   * Set-SystemEnv 以单条新值【整体覆写系统 PATH】且备份同步失真,必须抛错拒写。
+   * (展示用的读取走 readSystemPath,保留 null 降级语义,不受影响。)
+   */
   async readSystemVars(): Promise<EnvVar[]> {
     const out = await this.runPowerShell(['Get-SystemEnv']);
     const line = out.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('[')).pop();
-    if (!line) return [];
+    if (!line) throw new CoreError('system-read', 'Get-SystemEnv 无可解析输出,拒绝按虚假的"空环境"写入');
     const rows = JSON.parse(line) as Array<{ name?: unknown; kind?: unknown; value?: unknown }>;
     return rows.map((r) => ({ name: String(r.name), kind: String(r.kind ?? 'String'), value: String(r.value ?? '') }));
   }
 
   /**
-   * 系统变量写入(新增/修改同口)——§7.2 四步的系统版:
-   * 闸门 → 变量名校验 → 内置保护名单 → 快照 → 写+广播 → 失败还原。
-   * 幂等:值/类型都相同 → 零写入零备份。
+   * ★ C2(方向 A):向【系统 PATH】追加一条 —— 本服务唯一的系统级"新增"写出口
+   * (取代 F3 的自定义变量增/改/删;删除与改条目本工具不提供,用户到系统设置手动处理)。
+   * §7.2 四步的系统版:条目校验 → 闸门 → 读现值幂等 merge(等值已存在 = 零写入零备份)
+   * → 快照(scope=system)→ Set-SystemEnv 'Path'(保持原 Kind,缺省 ExpandString)→ 广播 → 失败快照还原。
+   * 红线:只增不删(mergePathEntries 语义),绝不重写其余条目。
    */
-  async applySystemVarSet(v: { name: string; value: string; kind: string }): Promise<EnvApplyResult> {
-    const name = String(v.name ?? '').trim();
-    assertSystemVarName(name);
-    if (isProtectedSystemVar(name)) {
-      throw new CoreError('system-var-protected', `${name} 是 Windows 内置系统变量,不支持修改(改坏会影响系统运行)`);
-    }
-    const kind = v.kind === 'String' || v.kind === 'ExpandString' ? v.kind : null;
-    if (kind === null) throw new CoreError('system-var-kind', `不支持的值类型:${v.kind}(仅 String/ExpandString)`);
+  async applySystemPathAdd(entry: string): Promise<EnvPathAddResult> {
+    const e = assertSystemPathEntry(entry);
     this.assertSystemWritable();
     const rows = await this.readSystemVars();
-    const cur = rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
-    if (cur && cur.value === v.value && cur.kind === kind) return { changed: [], backupFile: null, broadcast: null };
+    // 双保险 fail-closed:正常机器的 HKLM Environment 键不可能零值(SystemRoot/Path/windir 必在),
+    // 读出空表只可能是异常 —— 此时写入 = 用单条覆写整个 PATH 且备份失真,一律拒。
+    if (rows.length === 0) throw new CoreError('system-path-read', '系统环境变量读取结果为空(异常),拒绝追加以防整体覆写系统 PATH');
+    const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
+    const merged = mergePathEntries(pathRow?.value ?? '', [e]);
+    if (!merged.changed) return { changed: [], appended: [], backupFile: null, broadcast: null };
+    const kind = pathRow?.kind === 'String' ? 'String' : 'ExpandString'; // PATH 惯例 ExpandString,保住 %VAR%
     const backupFile = this.writeBackup(rows, 'system');
     const calls = [
-      `Set-SystemEnv -Name ${psLiteral(name)} -Value ${psLiteral(v.value)} -Kind ${kind}`,
+      `Set-SystemEnv -Name 'Path' -Value ${psLiteral(merged.value)} -Kind ${kind}`,
       'Publish-EnvChange',
     ];
     try {
-      return { changed: [name], backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
-    } catch (e) {
+      return { changed: ['Path'], appended: merged.appended, backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
+    } catch (err) {
       try {
         await this.restoreTo(rows, 'system');
       } catch (restoreErr) {
-        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
+        if (err instanceof CoreError) err.context = { ...err.context, restoreAlsoFailed: String(restoreErr) };
       }
-      throw this.asSystemError(e, '写入');
-    }
-  }
-
-  /** 系统变量删除(§7.2 四步的删除方向);内置保护名单内一律拒 */
-  async applySystemVarRemove(name: string): Promise<EnvApplyResult> {
-    const n = String(name ?? '').trim();
-    assertSystemVarName(n);
-    if (isProtectedSystemVar(n)) {
-      throw new CoreError('system-var-protected', `${n} 是 Windows 内置系统变量,不支持删除(删掉会影响系统运行)`);
-    }
-    this.assertSystemWritable();
-    const rows = await this.readSystemVars();
-    const cur = rows.find((r) => r.name.toLowerCase() === n.toLowerCase());
-    if (!cur) return { changed: [], backupFile: null, broadcast: null }; // 本来就没有 → 幂等
-    const backupFile = this.writeBackup(rows, 'system');
-    const calls = [`Remove-SystemEnv -Name ${psLiteral(cur.name)}`, 'Publish-EnvChange'];
-    try {
-      return { changed: [cur.name], backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
-    } catch (e) {
-      try {
-        await this.restoreTo(rows, 'system');
-      } catch (restoreErr) {
-        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
-      }
-      throw this.asSystemError(e, '删除');
+      throw this.asSystemError(err, '写入');
     }
   }
 

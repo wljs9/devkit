@@ -9,9 +9,9 @@ import {
   Channel, PushChannel,
   type Result, type SettingsView, type DownloadProgressEvent, type DownloadTaskStatus,
   type EnvAuditView, type EnvStateView, type InstallView, type ManagedEntryView,
-  type SystemEnvView, type SystemVarView,
+  type SystemEnvView,
 } from '../shared/ipc';
-import { isProtectedSystemVar, type EnvVar } from './core/env';
+import type { EnvVar } from './core/env';
 import type { InstallRecord } from './core/store';
 import { CoreError, isCoreError } from './core/errors';
 import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
@@ -46,17 +46,18 @@ async function wrap<T>(fn: () => Promise<T> | T): Promise<Result<T>> {
 export function registerIpc(): void {
   const s = initServices();
 
-  /** §4.6 目录偏好(源优先级 + 代理前缀覆盖)作用到条目 —— "JDK/Maven catalog 接真"的装配半边 */
-  const prefsFor = (tool: string): CatalogPrefs => {
+  /** §4.6 目录偏好作用到条目 —— ★C1(2026-09-20):「镜像源优先级」设置整段下线
+   *  (用户可在商店版本行自选源,设置页不再维护 per-tool 优先序);仅保留代理前缀覆盖(风险登记 §12 要求可换/可关)。
+   *  core 的 priority 机制(preferByPriority/applyCatalogPrefs)作为通用原语保留,目录内 sources 序即默认优先级。 */
+  const prefsFor = (): CatalogPrefs => {
     const st = s.store.load().settings as Record<string, unknown>;
-    const prio = st['sourcePriority'] as Record<string, string[]> | undefined;
     const prefixes = st['sourcePrefixes'] as Record<string, string> | undefined;
-    return { priority: prio?.[tool], proxyPrefixes: prefixes };
+    return { proxyPrefixes: prefixes };
   };
   const entryOf = (tool: string): CatalogEntry => {
     const e = s.catalogs().get(tool);
     if (!e) throw new CoreError('unknown-tool', `目录中无工具:${tool}`);
-    return applyCatalogPrefs(e, prefsFor(tool));
+    return applyCatalogPrefs(e, prefsFor());
   };
   /** 首选源按"偏好序 ∧ 覆盖范围"重决(latestOnly 只兜该 major 最新版) */
   const preferredOf = (v: DiscoveredVersion, entry: CatalogEntry): string =>
@@ -79,7 +80,6 @@ export function registerIpc(): void {
         displayName: c.displayName,
         installedCount: installs.filter((i) => i.tool === c.id).length,
         currentVersion: installs.find((i) => i.tool === c.id && i.isCurrent)?.version ?? null,
-        sourceIds: c.sources.map((x) => x.id),
       }));
     }),
   );
@@ -88,7 +88,7 @@ export function registerIpc(): void {
     wrap(async () => {
       const entry = entryOf(req.tool);
       const vs = await versionsOf(s, entry, Boolean(req.force));
-      const sourceIds = entry.sources.map((x) => x.id); // 已按 §4.6 优先级重排(entryOf)
+      const sourceIds = entry.sources.map((x) => x.id); // 目录内 sources 声明序即优先级(★C1:设置页 per-tool 优先级已下线)
       return vs.map((v) => ({
         tool: v.tool,
         version: v.version,
@@ -229,39 +229,22 @@ export function registerIpc(): void {
     }),
   );
 
-  // —— ★ F3 系统环境变量(HKLM):读列表 + 增/改/删。闸门/保护名单/快照全在 core(不靠 UI 自觉)
+  // —— ★ C2(方向 A)系统 PATH(HKLM):只读条目列表(替代 F3 的全变量列表)。读失败 = null,由 UI 说明
   ipcMain.handle(Channel.EnvSystemList, () =>
     wrap(async (): Promise<SystemEnvView> => {
       const enabled = s.store.load().settings['allowSystemEnv'] === true;
-      let rows: SystemVarView[] | null = null;
-      try {
-        rows = (await s.env.readSystemVars())
-          .map((v) => ({ name: v.name, kind: v.kind, value: v.value, protected: isProtectedSystemVar(v.name) }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-      } catch {
-        rows = null; // 读不到(HKLM 不可达/PS 异常)由 UI 说明,不当作"空"
-      }
-      return { enabled, elevated: await s.env.isElevated(), rows };
+      const systemValue = await s.env.readSystemPath(); // 只取 Path 一项;null = 读不到
+      return { enabled, elevated: await s.env.isElevated(), entries: systemValue === null ? null : splitPathList(systemValue) };
     }),
   );
 
-  ipcMain.handle(Channel.EnvSystemSet, (_e, req: { name: string; value: string; kind: string }) =>
+  // —— ★ C2 向系统 PATH 追加一条:闸门/校验/幂等 merge/快照/还原全在 core(不靠 UI 自觉);不提供删/改
+  ipcMain.handle(Channel.EnvSystemPathAdd, (_e, req: { entry: string }) =>
     wrap(async () => {
       const t0 = Date.now();
-      const r = await s.env.applySystemVarSet({ name: req.name, value: req.value ?? '', kind: req.kind ?? 'ExpandString' });
-      if (r.changed.length > 0) {
-        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { scope: 'system', set: r.changed }, backupFile: r.backupFile ?? undefined });
-      }
-      return null;
-    }),
-  );
-
-  ipcMain.handle(Channel.EnvSystemRemove, (_e, req: { name: string }) =>
-    wrap(async () => {
-      const t0 = Date.now();
-      const r = await s.env.applySystemVarRemove(req.name);
-      if (r.changed.length > 0) {
-        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { scope: 'system', removed: r.changed }, backupFile: r.backupFile ?? undefined });
+      const r = await s.env.applySystemPathAdd(req?.entry ?? '');
+      if (r.appended.length > 0) {
+        s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { scope: 'system', via: 'path-add', appended: r.appended }, backupFile: r.backupFile ?? undefined });
       }
       return null;
     }),
@@ -430,13 +413,7 @@ function sanitizeSettingsPatch(patch: Partial<SettingsView>): Record<string, unk
     if (typeof patch.allowSystemEnv !== 'boolean') throw new CoreError('bad-allow-system', 'allowSystemEnv 必须是布尔值');
     out.allowSystemEnv = patch.allowSystemEnv;
   }
-  if (patch.sourcePriority !== undefined) {
-    const clean: Record<string, string[]> = {};
-    for (const [tool, ids] of Object.entries(patch.sourcePriority)) {
-      if (Array.isArray(ids)) clean[tool] = ids.filter((x) => typeof x === 'string');
-    }
-    out.sourcePriority = clean;
-  }
+  // ★C1:sourcePriority 清洗段随设置项一并移除(旧存量脏值不再被读取,settingsView 亦不再回传)
   if (patch.sourcePrefixes !== undefined) {
     const clean: Record<string, string> = {};
     for (const [id, v] of Object.entries(patch.sourcePrefixes)) {
@@ -454,7 +431,6 @@ function settingsView(s: Services): SettingsView {
   const devRoot = typeof st['devRoot'] === 'string' && st['devRoot'].length > 0 ? (st['devRoot'] as string) : null;
   return {
     devRoot,
-    sourcePriority: (st['sourcePriority'] as Record<string, string[]>) ?? {},
     proxy: typeof st['proxy'] === 'string' ? (st['proxy'] as string) : '',
     concurrency: typeof st['concurrency'] === 'number' ? (st['concurrency'] as number) : 2,
     sourcePrefixes: (st['sourcePrefixes'] as Record<string, string>) ?? {},

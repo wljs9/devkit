@@ -49,8 +49,8 @@ export const api$ = {
   envPrune: (entries: string[]) => unwrap(api().envPrune({ entries })),
   envRestore: (file: string) => unwrap(api().envRestore({ file })),
   envSystemList: () => unwrap(api().envSystemList()),
-  envSystemSet: (name: string, value: string, kind: string) => unwrap(api().envSystemSet({ name, value, kind })),
-  envSystemRemove: (name: string) => unwrap(api().envSystemRemove({ name })),
+  /** ★ C2:向系统 PATH 追加一条(闸门/校验在 core;删除/修改本工具不提供) */
+  envSystemPathAdd: (entry: string) => unwrap(api().envSystemPathAdd({ entry })),
   historyList: (kind?: string, limit?: number) => unwrap(api().historyList({ kind, limit })),
   settingsGet: () => unwrap(api().settingsGet()),
   settingsSet: (patch: Parameters<DevkitApi['settingsSet']>[0]) => unwrap(api().settingsSet(patch)),

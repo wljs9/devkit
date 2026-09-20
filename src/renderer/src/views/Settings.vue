@@ -1,20 +1,21 @@
 <script setup lang="ts">
 /**
- * 设置页(产品 §4.6):DevRoot / 镜像源优先级(上移下移排序,MVP 等价拖拽)/ 网络(代理+并发)/
- * 缓存目录 + [清理缓存] / ★F3 系统环境变量开关(默认关,开启需二次确认)/ 关于。
- * 数据 api$.settingsGet+catalogList;写全部走 settings:set(§8 判别联合,main 侧清洗)。
+ * 设置页(产品 §4.6):DevRoot / 网络(代理+并发+GitHub 加速器前缀)/
+ * ★C2 系统 PATH(HKLM)写开关(默认关,开启需二次确认)/ 缓存目录 + [清理缓存] / 关于。
+ * ★C1(2026-09-20):「镜像源优先级」区块整段移除 —— 源切换在商店版本行完成,
+ * 且工具数增长后此区挤占页面空间;ghproxy 前缀设置挪入独立卡保留(风险登记 §12)。
+ * 数据 api$.settingsGet;写全部走 settings:set(§8 判别联合,main 侧清洗)。
  */
 import { computed, onMounted, ref } from 'vue';
 import {
-  NButton, NSpace, NInput, NInputNumber, NCard, NSelect, NPopconfirm, NAlert, NTag, NSwitch, useMessage, useDialog,
+  NButton, NSpace, NInput, NInputNumber, NCard, NSelect, NPopconfirm, NAlert, NSwitch, useMessage, useDialog,
 } from 'naive-ui';
 import { api$, DevkitError } from '../api';
-import type { SettingsView, ToolCardView } from '../../../shared/ipc';
+import type { SettingsView } from '../../../shared/ipc';
 
 const msg = useMessage();
 const dialog = useDialog();
 const settings = ref<SettingsView | null>(null);
-const tools = ref<ToolCardView[]>([]);
 const devRootDraft = ref('');
 const proxyDraft = ref('');
 const concDraft = ref(2);
@@ -23,7 +24,6 @@ const saving = ref<Record<string, boolean>>({});
 async function load(): Promise<void> {
   try {
     settings.value = await api$.settingsGet();
-    tools.value = await api$.catalogList();
     devRootDraft.value = settings.value?.devRoot ?? '';
     proxyDraft.value = settings.value?.proxy ?? '';
     concDraft.value = settings.value?.concurrency ?? 2;
@@ -43,20 +43,6 @@ async function patch(label: string, p: Partial<SettingsView>): Promise<void> {
   } finally {
     saving.value[label] = false;
   }
-}
-
-// —— 源优先级(§4.6:每工具一个有序源列表,上/下移动 = 排序)
-const prio = computed<Record<string, string[]>>(() => {
-  const out: Record<string, string[]> = {};
-  for (const t of tools.value) out[t.id] = [...(settings.value?.sourcePriority[t.id] ?? t.sourceIds)];
-  return out;
-});
-function move(tool: string, idx: number, dir: -1 | 1): void {
-  const list = prio.value[tool];
-  const j = idx + dir;
-  if (!list || j < 0 || j >= list.length) return;
-  [list[idx], list[j]] = [list[j]!, list[idx]!];
-  void patch(`prio:${tool}`, { sourcePriority: { ...(settings.value?.sourcePriority ?? {}), [tool]: [...list] } });
 }
 
 // —— ghproxy 加速器前缀(风险登记 §12:第三方代理可换/可关)。三态:目录默认 / 直连 / 自定义
@@ -86,16 +72,16 @@ async function applyCustomPrefix(): Promise<void> {
   await patch('prefix', { sourcePrefixes: { ...(settings.value?.sourcePrefixes ?? {}), ghproxy: v } });
 }
 
-// —— ★F3 系统环境变量写开关:默认关;开启走二次确认(产品文档 §3.1"动系统级必须显式二次确认")
+// —— ★C2 系统 PATH 写开关(F3 开关收窄):默认关;开启走二次确认(产品文档 §3.1"动系统级必须显式二次确认")
 async function toggleSystem(v: boolean): Promise<void> {
   if (!v) {
     await patch('allowSystem', { allowSystemEnv: false });
-    msg.success('已关闭系统环境变量写入');
+    msg.success('已关闭系统 PATH 写入');
     return;
   }
   dialog.warning({
-    title: '开启系统环境变量写入?',
-    content: '开启后,「环境」页可以新增/修改/删除本机【系统级】(注册表 HKLM)环境变量,例如 JAVA_HOME、MAVEN_HOME。\n\n· Windows 内置变量(Path、SystemRoot、TEMP 等)与系统 Path 不在允许范围,始终只读;\n· 每次写入前自动存快照,可在环境页/历史页回滚;\n· 真正写入需要以【管理员身份】运行 DevKit。',
+    title: '开启系统 PATH 写入?',
+    content: '开启后,「环境」页可以向本机【系统级】PATH(注册表 HKLM)追加条目。\n\n· 只支持"追加一条":修改与删除本工具不提供(请到 Windows 设置 → 系统环境变量 手动处理);\n· 每次写入前自动存快照,可在环境页/历史页回滚;\n· 真正写入需要以【管理员身份】运行 DevKit。',
     positiveText: '我明白,开启',
     negativeText: '取消',
     onPositiveClick: () => {
@@ -141,17 +127,18 @@ onMounted(load);</script>
       </n-alert>
     </n-card>
 
-    <n-card title="镜像源优先级(每工具源按序即优先)" size="small" style="margin-bottom: 16px">
-      <div v-for="t in tools" :key="t.id" style="margin-bottom: 10px">
-        <div class="sec-title">{{ t.displayName }}</div>
-        <div v-for="(sid, i) in prio[t.id]" :key="sid" class="src-row">
-          <n-tag size="tiny" :bordered="false" style="min-width: 22px; text-align: center">{{ i + 1 }}</n-tag>
-          <span class="mono" style="flex: 1">{{ sid }}</span>
-          <n-button size="tiny" :disabled="i === 0" @click="move(t.id, i, -1)">↑</n-button>
-          <n-button size="tiny" :disabled="i >= (prio[t.id]?.length ?? 0) - 1" @click="move(t.id, i, 1)">↓</n-button>
-        </div>
-      </div>
-      <div class="sec-title" style="margin-top: 14px">GitHub 加速器前缀(JDK 历史版本 ghproxy 源)</div>
+    <n-card title="网络" size="small" style="margin-bottom: 16px">
+      <n-space align="center" style="margin-bottom: 10px">
+        <span class="sec-title" style="margin: 0">代理 URL</span>
+        <n-input v-model:value="proxyDraft" size="small" style="width: 300px" placeholder="http://127.0.0.1:7890(留空=跟随系统)" />
+        <n-button size="small" :loading="saving['proxy']" @click="patch('proxy', { proxy: proxyDraft })">保存</n-button>
+      </n-space>
+      <n-space align="center" style="margin-bottom: 10px">
+        <span class="sec-title" style="margin: 0">下载并发</span>
+        <n-input-number v-model:value="concDraft" size="small" :min="1" :max="6" style="width: 110px" />
+        <n-button size="small" :loading="saving['conc']" @click="patch('conc', { concurrency: concDraft ?? 2 })">保存</n-button>
+      </n-space>
+      <div class="sec-title">GitHub 加速器前缀(JDK 历史版本 ghproxy 源)</div>
       <n-space align="center">
         <n-select :value="prefixMode" size="small" style="width: 220px" :options="PREFIX_OPTIONS" @update:value="(v: PrefixMode) => setPrefixMode(v)" />
         <template v-if="prefixMode === 'custom'">
@@ -161,24 +148,11 @@ onMounted(load);</script>
       </n-space>
     </n-card>
 
-    <n-card title="网络" size="small" style="margin-bottom: 16px">
-      <n-space align="center" style="margin-bottom: 10px">
-        <span class="sec-title" style="margin: 0">代理 URL</span>
-        <n-input v-model:value="proxyDraft" size="small" style="width: 300px" placeholder="http://127.0.0.1:7890(留空=跟随系统)" />
-        <n-button size="small" :loading="saving['proxy']" @click="patch('proxy', { proxy: proxyDraft })">保存</n-button>
-      </n-space>
-      <n-space align="center">
-        <span class="sec-title" style="margin: 0">下载并发</span>
-        <n-input-number v-model:value="concDraft" size="small" :min="1" :max="6" style="width: 110px" />
-        <n-button size="small" :loading="saving['conc']" @click="patch('conc', { concurrency: concDraft ?? 2 })">保存</n-button>
-      </n-space>
-    </n-card>
-
-    <n-card title="系统环境变量(高级,默认关闭)" size="small" style="margin-bottom: 16px">
+    <n-card title="系统 PATH(HKLM,高级,默认关闭)" size="small" style="margin-bottom: 16px">
       <n-space align="center" justify="space-between" :wrap="false">
         <div style="font-size: 13px; max-width: 520px">
-          打开后可在「环境」页新增 / 修改 / 删除 <b>系统级(HKLM)</b> 变量(如 JAVA_HOME、MAVEN_HOME)。
-          <b>Windows 内置变量与系统 Path 始终只读</b>;每次写入前自动快照,可回滚;写入需要<b>管理员权限</b>。
+          ★C2 口径:打开后仅可在「环境」页向<b>系统 PATH</b> <b>追加条目</b>。
+          修改与删除本工具不提供(请到 Windows 设置 → 系统环境变量 手动处理);每次写入前自动快照,可回滚;写入需要<b>管理员权限</b>。
         </div>
         <n-switch
           :value="settings?.allowSystemEnv ?? false"
@@ -222,11 +196,5 @@ onMounted(load);</script>
   font-weight: 600;
   font-size: 13px;
   margin-bottom: 4px;
-}
-.src-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
 }
 </style>

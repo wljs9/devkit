@@ -1,12 +1,11 @@
 # DevKit — 待办与流程清单(新会话按此继续)
 
-> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2)。
+> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2);2026-09-21(C3 登记待接单)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1/C2(《功能改进建议.md》2026-09-20 两条)已完成并发布
-> (2026-09-20:走查通过,commit `3509542`,门禁 173/173,`/security-review` 复跑 1 Medium 已修,
-> bump 0.4.1 → tag `v1.4.0` → Release v1.4.0(prerelease)已发,详见「C 轮实况」发布段)。
-> 当前活待办 = **C3「装什么管什么」动态受管 PATH**(2026-09-21 用户新提,推翻 M3 决策 A,接单前先确认四条边界)
-> + 「F5 未收录工具」节(Tomcat/Nginx/CMake/Rust 发落)。新会话先读 `CLAUDE.md` 启动指引,再回本表。**
+> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1–C3 全部完成并推送
+> (C1/C2 = v1.4.0 已发 2026-09-20;●C3「装什么管什么」动态受管 PATH = 2026-09-21 用户新提,
+> 2026-09-22 走查通过 + 推送 commit `e33a892`,门禁 188/188,详见「C3 实况」)。
+> 当前活待办 = 「F5 未收录工具」节(Tomcat/Nginx/CMake/Rust 发落)。新会话先读 `CLAUDE.md` 启动指引,再回本表。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -66,7 +65,7 @@
 | F5 | 功能 | **二星工具第一批收录**(《功能改进建议.md》2026-09-19:评估 ★★☆☆☆ 两节后用户拍板按"轻松档"先收 3 个):**Gradle / Go / SQLite**。核心扩展:`listScan.shape` 增 `array`(Go dl API:versionRegex 剥 `go` 前缀 + pick 键选 win-amd64 资产)+ checksum kind 增 `discoveredInline`(API 内嵌 sha256,adoptiumApi 同范式)+ listKind 增 `regexPage`(sqlite.org download.html 的 PRODUCT 数据行)。源:Gradle=华为云(170 版)/腾讯云 + 官方 sha256 侧车(跨域);Go=golang.google.cn(1.6MB/s)+ 阿里云镜像(171 版);SQLite=官方单源 ~6MB + pinnedHash(3.53.4 真哈希已回填)。**真机 e2e 三工具全过**(gradle 9.7.1 需 JAVA_HOME 属工具常识;go `go version go1.27.1`、sqlite `3.53.4` 实测)。验收:三工具商店可见/版本列表/安装/切换/接管齐 + 门禁全绿(170/170)。**未收录的评估结论见下方「F5 未收录工具」节,Tomcat/Nginx/CMake/Rust 延后待用户发落。** | ✅ 完成并 Release 2026-09-20(走查通过;远端 `e5bd6c5` + tag `v1.3.0` + Release prerelease,详见 F5 实况收尾段) |
 | C1 | 改进 | **设置页移除「镜像源优先级」区块**(《功能改进建议.md》2026-09-20 第 1 条):用户已可在商店版本行自选源,此区随工具增多挤压设置页空间。范围(实现时定):UI 整段移除 + `SettingsView.sourcePriority`/`ToolCardView.sourceIds` 契约删除 + prefsFor 停读;**ghproxy 加速器前缀保留**(挪入网络卡,风险登记 §12 要求可换/可关);catalog.ts 的 priority 通用原语与单测不动。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
 | C2 | 改进 | **环境页「系统环境变量(HKLM)」区 → 方向 A 已拍板(2026-09-20 用户)**:区改名「系统 PATH(HKLM)」,只列系统 PATH 条目(可看);**可追加一条**(开关开+管理员);**不提供修改/删除**(用户到 Windows 系统设置手动做);F3 的自定义变量表与增删改、`env:system-set/remove` 通道、core `applySystemVarSet/Remove` 全下线,新增 `applySystemPathAdd` + `env:system-path-add`;安全复查发现并修复 1 Medium(readSystemVars 降级空表可致单条覆写整个 PATH → fail-closed)。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
-| C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool>bin` 等按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠。设计落点预判:`paths.envPlan` 由静态 3 条改为按 installs 登记生成,仍走 §7.2 四步幂等 merge,切换版本依旧零 PATH 变动(junction 不变);prune 受管保护判定改按"当前在管"集合。**接单前须确认边界**:①接入时机(装完自动写 / diff 预览确认 / 环境页一键接入,备份红线两案都保);②接管项是否同样自动接入;③JAVA_HOME 维持现口径还是并入逐工具;④历史回滚语义。 | ⬜ 待接单(先复述边界) |
+| C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool><bin|binName>` 按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠;**装了 jdk 才写 JAVA_HOME(悬空根治)**。边界已全部确认(接单时):①装完自动接入;②接管同权自动接入;③JAVA_HOME 装 jdk 才写;④快照全量恢复照旧。**验收:安装/接管即自动接入(新终端直接用)、卸载/移出登记自动断开、环境页受管区随在管工具逐条展示、JAVA_HOME 不再悬空、切换版本依旧零 PATH 变动。** | ✅ 完成并推送 2026-09-22 · commit `e33a892`(见 C3 实况) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -129,6 +128,39 @@
   tag 跟随产品文档版本号、与包版本双轨,同 F5 的 tag v1.3.0 = 产品文档 v1.3)。Release **v1.4.0(prerelease)**
   = `https://github.com/wljs9/devkit/releases/tag/v1.4.0`,附件 `devkit-setup-0.4.1.exe`,正文附哈希。
   **C1/C2 关闭。** 备注:本轮会话凭据提取脚本脱敏瑕疵致 PAT 前缀片段进入日志 → 建议轮换令牌(有效期原至 2026-11-07)。
+
+### C3 实况(2026-09-21 用户新提 → 2026-09-22 走查通过 + 推送;推翻 M3 决策 A)
+
+- **输入**:《功能改进建议.md》2026-09-21 单条(删除历史 2026-09-20 已完成的两条,清空留新)。用户原话口径:
+  "装了哪个工具,这个工具的 PATH 入口就该由软件接入(新开终端能直接用);卸载/移出登记后自动断开;
+  环境页受管条目区应随实际安装情况逐工具展示,而不是装了一堆工具却只显示最初那三条"。
+- **四条边界(接单前已确认,全选推荐)**:①**装完自动接入**;②**接管同样自动接入**;③**装了 jdk 才写
+  JAVA_HOME**(不悬空);④历史回滚=**快照全量恢复照旧**,回滚后与当前在管不一致由体检暴露。
+- **已实现(commit `e33a892`)**:core 三角——paths.envPlan(固定三条)删除、`EnvPlan.javaHome` 改
+  `string | null`;install.ts 增 `pathEntrySuffixOf`(layout/binName 派生目录段:binSubdir→`\bin|\cmd`,
+  binAtRoot→根)/`toolManagedContribution`(jdk→`%JAVA_HOME%\bin`+`JAVA_HOME=current\jdk` 特例;
+  其余→`current\<tool>[+段]`)/`envPlanForInstalls`(installs+全部 catalog → 全量动态计划,去重+catalog 序);
+  `InstallContext` 增 `env?`(可选注入,测试缺省不写);安装/接管登记后自动 `applyPlan`(**接入失败不回转
+  安装**,记历史 env_write FAIL,环境页「重新接入」补齐);卸载/移出登记该工具清空后 `autoDisconnectOnToolEmpty`
+  (`applyRemoval` 精确等值删 PATH 条目 + `env.removeJavaHome(expected)` **只删"现值==我们设的 current\jdk"**);
+  env 侧 `removeJavaHome` 新增(§7.2 四步)。ipc/契约/UI 四路同源换动态计划(EnvAudit 受管区、EnvPrune
+  保护集合、env:state、SetupPreview/Run=写当前在管条目,首跑未装工具 noop);环境页 JAVA_HOME 行仅 jdk
+  在管时显示;向导与「重新接入环境」文案改"装什么管什么"口径。
+- **门禁**:`pnpm typecheck` 两段干净;**`pnpm test` 188/188**(基线 173 只增不减;+15:动态计划 7
+  [单工具形态/多工具去重排序/空计划/jdk 特例/suffix]+ env 4 [applyPlan javaHome null 不碰用户 JAVA_HOME ·
+  removeJavaHome 三案]+ install 3 [自动接入参数 · env 缺省零写 · 接入失败不回转]+ adopt 3 [接管接入 ·
+  移出清空断开 · 仍有版本不断开]+ paths 适配 1)。
+- **行为变化(走查已确认合理)**:①首跑向导不再预写固定 3 条(没装工具 = 无可接入);②JAVA_HOME 永不悬空
+  (无 jdk 不写,卸 jdk 清空回收);③老用户 PATH 里的固定 3 条若对应工具未装 → 降级为普通外部条目,
+  体检表标出可勾删(不自动删)。
+- **✅ 走查通过(2026-09-22)**:用户实走安装/接管/卸载/移出登记与 JAVA_HOME 回收路径后确认。推送
+  `git push origin main && git push origin --tags`(VPN 开,走 127.0.0.1:65532 代理)。**未 bump 版本、
+  未发新 Release**(C3 无打包链改动,继续沿用 v1.4.0/0.4.1;是否发版待用户后续发落)。远端 = `e33a892`。
+- **开工提示**(下一会话):动态受管计划唯一权威 = `install.ts envPlanForInstalls`;老「固定 3 条」已不存在,
+  别在代码里找 `paths.envPlan`。新增 catalog 工具时,其 PATH 入口自动按 `layout/binName` 派生(无额外配置);
+  若工具是 JDK 形态(要走 JAVA_HOME 而非 current\<tool>\bin),在 `toolManagedContribution` 的 jdk 特判里扩展。
+- 另:上一轮(2026-09-20 会话)曾有 PAT 前缀片段入日志、已建议轮换令牌 —— 凭据在 Windows 凭据管理器,
+  PAT 至 ~2026-11-07;push 认证失败先按 CLAUDE.md 双态排查。
 
 ### F5 未收录工具(2026-09-19 评估归档,收录与否待用户后续发落)
 

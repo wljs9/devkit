@@ -8,9 +8,10 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogEntrySchema, type CatalogEntry } from '../src/main/core/catalog';
 import { Downloader } from '../src/main/core/download';
+import { type EnvService } from '../src/main/core/env';
 import { HistoryLog } from '../src/main/core/history';
 import {
   adoptInstall, assertAdoptableDir, forgetInstall, probeAdoptVersion, resolveOpenableInstallDir, uninstall,
@@ -313,5 +314,64 @@ describe('★ F1 open-path 对接管项的路径收口(S2 语义不变)', () => 
   it('下载安装的登记项仍守 DevRoot 前缀闸(origin 缺省 = download)', () => {
     const outside = mkExt('open-download', jdkInstall('21'));
     expect(() => resolveOpenableInstallDir(devRoot, [recOf('d', outside)], 'd')).toThrowError(/不在 DevRoot 内/);
+  });
+});
+
+// ---- ◇C3「装什么管什么」:接管同样自动接入,移出登记(清空)自动断开(2026-09-21 边界②) ----
+
+const envSpy = () => ({
+  applyPlan: vi.fn(),
+  applyRemoval: vi.fn(),
+  removeJavaHome: vi.fn(),
+});
+/** ctx() 展开后注入 env stub(只记录调用,不真碰注册表) */
+const ctxWithEnv = (env: ReturnType<typeof envSpy>) => ({ ...ctx(), env: env as unknown as EnvService });
+
+describe('◇C3 接管自动接入(边界②:与下载安装同权)', () => {
+  const javaHomeOf = () => path.join(devRoot, 'current', 'jdk');
+
+  it('接管 JDK → applyPlan({javaHome: <devRoot>\\current\\jdk, pathEntries:[%JAVA_HOME%\\bin]}),晚于登记建链', async () => {
+    const dir = mkExt('c3-jdk', jdkInstall('21.0.4'));
+    const spy = envSpy();
+    const rec = await adoptInstall(jdkEntry(), dir, ctxWithEnv(spy), { run: runStub('') });
+    expect(rec.version).toBe('21.0.4');
+    expect(spy.applyPlan).toHaveBeenCalledTimes(1);
+    expect(spy.applyPlan).toHaveBeenCalledWith({ javaHome: javaHomeOf(), pathEntries: ['%JAVA_HOME%\\bin'] });
+  });
+
+  it('接管 Node(binAtRoot)→ applyPlan({javaHome:null, pathEntries:[current\\node]})', async () => {
+    const dir = mkNamed(mkExt('c3-node'), 'node-v22.17.1', { 'node.exe': '' });
+    const spy = envSpy();
+    await adoptInstall(nodeEntry(), dir, ctxWithEnv(spy), { run: runStub('v22.17.1\n') });
+    expect(spy.applyPlan).toHaveBeenCalledWith({ javaHome: null, pathEntries: [path.join(devRoot, 'current', 'node')] });
+  });
+});
+
+describe('◇C3 移出登记(清空该工具)自动断开(边界①"卸载/移出自动断开"的接管侧)', () => {
+  it('接管 JDK 后移出登记 → 精确删 %JAVA_HOME%\\bin + 回收 JAVA_HOME(current\\jdk 现值);目录文件原样', async () => {
+    const dir = mkExt('c3-forget', jdkInstall('21.0.4'));
+    const spy = envSpy();
+    await adoptInstall(jdkEntry(), dir, ctxWithEnv(spy), { run: runStub('') });
+    spy.applyPlan.mockClear();
+    await forgetInstall(jdkEntry(), '21.0.4', ctxWithEnv(spy));
+    expect(spy.applyPlan).not.toHaveBeenCalled();
+    expect(spy.applyRemoval).toHaveBeenCalledTimes(1);
+    expect(spy.applyRemoval).toHaveBeenCalledWith(['%JAVA_HOME%\\bin']); // 等值精确删(removePathEntries)
+    expect(spy.removeJavaHome).toHaveBeenCalledTimes(1);
+    expect(spy.removeJavaHome).toHaveBeenCalledWith(path.join(devRoot, 'current', 'jdk'));
+    expect(fs.readFileSync(path.join(dir, 'release'), 'utf8')).toContain('21.0.4'); // 文件原样
+  });
+
+  it('移出后该工具仍有其他版本 → 不断开(零写调用),仍算在管', async () => {
+    const a = mkExt('c3-keep-a', jdkInstall('17.0.9'));
+    const b = mkExt('c3-keep-b', jdkInstall('21.0.4'));
+    const spy = envSpy();
+    await adoptInstall(jdkEntry(), a, ctxWithEnv(spy), { run: runStub('') });
+    await adoptInstall(jdkEntry(), b, ctxWithEnv(spy), { run: runStub('') });
+    spy.applyPlan.mockClear();
+    await forgetInstall(jdkEntry(), '21.0.4', ctxWithEnv(spy)); // 剩 17.0.9 仍在管
+    expect(spy.applyRemoval).not.toHaveBeenCalled();
+    expect(spy.removeJavaHome).not.toHaveBeenCalled();
+    expect(store.load().installs).toHaveLength(1);
   });
 });

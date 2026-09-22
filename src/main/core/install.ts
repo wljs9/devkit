@@ -12,8 +12,9 @@ import { promisify } from 'node:util';
 import { CoreError } from './errors';
 import { Downloader, type DownloadProgress, type HashAlgo } from './download';
 import { assertDeletableRealDir, ensureJunction, inspectLink, removeJunction, switchJunction } from './junction';
-import { cacheDir, currentLinkPath, extractTempDir, toolVersionDir, versionDir } from './paths';
+import { cacheDir, currentLinkPath, extractTempDir, toolVersionDir, versionDir, type EnvPlan } from './paths';
 import { fileUrlFor, renderTemplate, sourceOf, type CatalogEntry, type DiscoveredVersion } from './catalog';
+import type { EnvService } from './env';
 import type { HistoryLog } from './history';
 import type { InstallRecord, JsonRepository } from './store';
 
@@ -23,6 +24,64 @@ export interface InstallContext {
   store: JsonRepository;
   history: HistoryLog;
   fetchText?: (url: string) => Promise<string>;
+  /** ◇C3(2026-09-21)「装什么管什么」:注入 EnvService 后,安装/接管自动接入受管 PATH,卸载/移出登记自动断开。缺省(测试)不写。 */
+  env?: EnvService;
+}
+
+// ---------------------------------------------------------------- ◇C3:受管 PATH 条目随在管工具动态生成(2026-09-21,推翻 M3 决策 A"固定 3 条")
+
+/** ◇C3:该工具登记已清空 → 自动断开其受管入口(精确等值删 PATH 条目;jdk 顺手回收"我们设的"JAVA_HOME)。失败只记历史,不反噬主操作。 */
+async function autoDisconnectOnToolEmpty(entry: CatalogEntry, ctx: InstallContext, via: string): Promise<void> {
+  if (!ctx.env) return;
+  if (ctx.store.load().installs.some((i) => i.tool === entry.id)) return; // 工具仍有版本在管 → 不动
+  try {
+    const c = toolManagedContribution(ctx.devRoot, entry);
+    await ctx.env.applyRemoval(c.paths);
+    if (c.javaHome !== null) await ctx.env.removeJavaHome(c.javaHome);
+  } catch (envErr) {
+    ctx.history.append({
+      kind: 'env_write',
+      ok: false,
+      durationMs: 0,
+      detail: { via, tool: entry.id, error: envErr instanceof Error ? envErr.message : String(envErr) },
+    });
+  }
+}
+
+/** 该工具受管 PATH 入口的目录段:binSubdir → \<binName|bin>(MinGit 是 cmd\);binAtRoot → 根目录(空串)(catalog §6 layout) */
+export function pathEntrySuffixOf(entry: Pick<CatalogEntry, 'layout' | 'binName'>): string {
+  return entry.layout === 'binSubdir' ? `\\${entry.binName ?? 'bin'}` : '';
+}
+
+/**
+ * 一个工具"在管时"(有 ≥1 条登记,无论哪个版本为 current)对环境计划的贡献:
+ * jdk 走 JAVA_HOME 特例(产品文档 §6 第三条 = %JAVA_HOME%\bin,值 = current\jdk —— 装了 jdk 才写);
+ * 其余 = <DevRoot>\current\<tool>[+目录段](junction 常驻,切换版本零 PATH 变动,§6 支柱 2)。
+ */
+export function toolManagedContribution(
+  devRoot: string,
+  entry: Pick<CatalogEntry, 'id' | 'layout' | 'binName'>,
+): { paths: string[]; javaHome: string | null } {
+  if (entry.id === 'jdk') return { paths: ['%JAVA_HOME%\\bin'], javaHome: currentLinkPath(devRoot, 'jdk') };
+  return { paths: [currentLinkPath(devRoot, entry.id) + pathEntrySuffixOf(entry)], javaHome: null };
+}
+
+/** installs 登记 → 动态 EnvPlan:在管工具全量,catalog 声明序排布、去重 —— UI/向导/prune 保护与"增量接入"同源(◇C3) */
+export function envPlanForInstalls(
+  devRoot: string,
+  installs: ReadonlyArray<{ tool: string }>,
+  entries: ReadonlyArray<Pick<CatalogEntry, 'id' | 'layout' | 'binName'>>,
+): EnvPlan {
+  const tools = new Set(installs.map((i) => i.tool));
+  const pathEntries: string[] = [];
+  let javaHome: string | null = null;
+  for (const e of entries) {
+    if (!tools.has(e.id)) continue;
+    const c = toolManagedContribution(devRoot, e);
+    for (const p of c.paths) if (!pathEntries.includes(p)) pathEntries.push(p);
+    if (c.javaHome !== null) javaHome ??= c.javaHome;
+  }
+  return { javaHome, pathEntries };
 }
 
 function hostOf(u: string): string {
@@ -246,6 +305,22 @@ export async function install(
     ctx.store.update((d) => ({ ...d, installs: [...d.installs, rec] }));
     if (rec.isCurrent) ensureJunction(currentLinkPath(ctx.devRoot, entry.id), target);
 
+    // ◇C3:装完自动接入 —— 该工具成为在管工具,其受管入口并入用户 PATH(幂等 merge,§7.2 快照+失败还原)。
+    //   PATH 接入失败**不回转安装**(文件/登记/链已就位):记历史 FAIL,由环境页受管区标 ✗ 经「重新接入」补救。
+    if (ctx.env) {
+      try {
+        const c = toolManagedContribution(ctx.devRoot, entry);
+        await ctx.env.applyPlan({ javaHome: c.javaHome, pathEntries: c.paths });
+      } catch (envErr) {
+        ctx.history.append({
+          kind: 'env_write',
+          ok: false,
+          durationMs: 0,
+          detail: { via: 'auto-on-install', tool: entry.id, version: ver.version, error: envErr instanceof Error ? envErr.message : String(envErr) },
+        });
+      }
+    }
+
     done(true, { path: target, bytes: out.bytes, autoCurrent: rec.isCurrent });
     return rec;
   } catch (e) {
@@ -400,6 +475,22 @@ export async function adoptInstall(entry: CatalogEntry, dir: string, ctx: Instal
     if (isFirstForTool) rec.isCurrent = true;
     ctx.store.update((d) => ({ ...d, installs: [...d.installs, rec] }));
     if (rec.isCurrent) ensureJunction(currentLinkPath(ctx.devRoot, entry.id), target);
+
+    // ◇C3:接管成功自动接入(与下载安装同权;边界②已拍板) —— 只登记+建链+接入,绝不碰被接管目录里的文件
+    if (ctx.env) {
+      try {
+        const c = toolManagedContribution(ctx.devRoot, entry);
+        await ctx.env.applyPlan({ javaHome: c.javaHome, pathEntries: c.paths });
+      } catch (envErr) {
+        ctx.history.append({
+          kind: 'env_write',
+          ok: false,
+          durationMs: 0,
+          detail: { via: 'auto-on-adopt', tool: entry.id, version: hit.version, error: envErr instanceof Error ? envErr.message : String(envErr) },
+        });
+      }
+    }
+
     done(true, { version: hit.version, via: hit.via, autoCurrent: rec.isCurrent });
     return rec;
   } catch (e) {
@@ -421,6 +512,8 @@ export async function forgetInstall(entry: CatalogEntry, version: string, ctx: I
   const link = currentLinkPath(ctx.devRoot, entry.id);
   const insp = inspectLink(link);
   if (insp.isLink && insp.realTarget && pathEq(insp.realTarget, rec.path)) removeJunction(link); // 只断链
+  // ◇C3:移出登记后该工具无剩余 → 自动断开受管入口(接管项同样自动接入,移出登记自然对称断开)
+  await autoDisconnectOnToolEmpty(entry, ctx, 'auto-on-forget');
   ctx.history.append({ kind: 'forget', ok: true, durationMs: Date.now() - t0, detail: { tool: entry.id, version, path: rec.path } });
 }
 
@@ -462,6 +555,8 @@ export async function uninstall(entry: CatalogEntry, version: string, ctx: Insta
     if (link.isLink && !link.realTarget && rec && pathEq(link.linkTarget ?? '', rec.path)) removeJunction(currentLinkPath(ctx.devRoot, entry.id));
     return { ...d, installs: d.installs.filter((i) => !(i.tool === entry.id && i.version === version)) };
   });
+  // ◇C3:卸载后该工具无剩余登记 → 自动断开受管入口(边界①"卸载自动断开")—— 删的是 current 层入口与"我们设的"JAVA_HOME
+  await autoDisconnectOnToolEmpty(entry, ctx, 'auto-on-uninstall');
   ctx.history.append({ kind: 'uninstall', ok: true, durationMs: Date.now() - t0, detail: { tool: entry.id, version } });
 }
 

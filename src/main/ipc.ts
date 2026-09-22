@@ -15,9 +15,9 @@ import type { EnvVar } from './core/env';
 import type { InstallRecord } from './core/store';
 import { CoreError, isCoreError } from './core/errors';
 import { applyCatalogPrefs, preferByPriority, type CatalogEntry, type CatalogPrefs, type DiscoveredVersion } from './core/catalog';
-import { adoptInstall, forgetInstall, install, setCurrent, uninstall, ensureDevRoot, resolveOpenableInstallDir, type InstallContext } from './core/install';
+import { adoptInstall, forgetInstall, install, setCurrent, uninstall, ensureDevRoot, resolveOpenableInstallDir, envPlanForInstalls, type InstallContext } from './core/install';
 import { cacheStats, clearDownloadCache, DownloadError } from './core/download';
-import { classifyPathEntries, envPlan, checkDevRoot, expandPathVars, splitPathList, pathEntryEquals, mergePathEntries } from './core/paths';
+import { classifyPathEntries, checkDevRoot, expandPathVars, splitPathList, pathEntryEquals, mergePathEntries, type EnvPlan } from './core/paths';
 import { initServices, suggestDevRoot, versionsOf, type Services } from './services';
 
 function ok<T>(data: T): Result<T> {
@@ -62,7 +62,9 @@ export function registerIpc(): void {
   /** 首选源按"偏好序 ∧ 覆盖范围"重决(latestOnly 只兜该 major 最新版) */
   const preferredOf = (v: DiscoveredVersion, entry: CatalogEntry): string =>
     preferByPriority(v, entry.sources) || v.preferredSourceId || entry.sources[0]!.id;
-  const ctx = (): InstallContext => ({ devRoot: requireDevRoot(s), downloader: s.downloader(), store: s.store, history: s.history });
+  const ctx = (): InstallContext => ({ devRoot: requireDevRoot(s), downloader: s.downloader(), store: s.store, history: s.history, env: s.env });
+  /** ◇C3:在管工具全量动态计划(受管条目随 installs 登记,四路同源 = core envPlanForInstalls) */
+  const dynamicPlan = (devRoot: string): EnvPlan => dynamicPlanOf(s, devRoot);
   const findVersion = async (entry: CatalogEntry, version: string): Promise<DiscoveredVersion> => {
     const vs = await versionsOf(s, entry, false);
     const v = vs.find((x) => x.version === version);
@@ -188,15 +190,16 @@ export function registerIpc(): void {
       // 展开口径:%JAVA_HOME% 按注册表现值(非 process.env 的陈旧值),其余变量走进程环境
       const envMap: NodeJS.ProcessEnv = { ...process.env };
       if (javaRow?.value) envMap['JAVA_HOME'] = javaRow.value;
+      const plan = devRoot ? dynamicPlan(devRoot) : null;
       const cls = classifyPathEntries({
         userValue: pathRow?.value ?? '',
         systemValue,
-        managedEntries: devRoot ? envPlan(devRoot).pathEntries : [],
+        managedEntries: plan?.pathEntries ?? [],
         expand: (x) => expandPathVars(x, envMap),
       });
       return {
         devRoot,
-        managed: devRoot ? managedEntries(devRoot, rows) : [],
+        managed: devRoot && plan ? managedEntries(devRoot, rows, plan) : [],
         rows: cls.rows,
         systemReadable: systemValue !== null, // HKLM 读不到 → UI 注明"仅覆盖用户 PATH"
         summary: cls.summary,
@@ -208,7 +211,8 @@ export function registerIpc(): void {
   ipcMain.handle(Channel.EnvPrune, (_e, req: { entries: string[] }) =>
     wrap(async () => {
       const devRoot = requireDevRoot(s);
-      const plan = envPlan(devRoot);
+      // ◇C3:保护集合 = 当前"在管"工具的受管入口(动态,不再是写死的三条);不在管的工具条目可照常勾删清理
+      const plan = dynamicPlan(devRoot);
       const hit = req.entries.filter((x) => plan.pathEntries.some((m) => pathEntryEquals(m, x) || pathEntryEquals(m, expandPathVars(x))));
       if (hit.length > 0) throw new CoreError('prune-protected', `拒删本工具受管条目(接入/重连只走向导):${hit.join(' ; ')}`);
       const t0 = Date.now();
@@ -298,12 +302,13 @@ export function registerIpc(): void {
     wrap(async () => {
       const check = checkDevRoot(req.devRoot);
       if (!check.ok) throw new CoreError('bad-devroot', check.reasons.join(';'));
-      const plan = envPlan(req.devRoot);
+      // ◇C3:向导/重新接入 = 写"当前在管工具"的动态计划(首跑未装任何工具 → 无可接入条目,noop)
+      const plan = envPlanForInstalls(req.devRoot, s.store.load().installs, [...s.catalogs().values()]);
       const rows = await s.env.readAll();
       const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
       const javaRow = rows.find((r) => r.name.toLowerCase() === 'java_home');
       const merged = mergePathEntries(pathRow?.value ?? '', plan.pathEntries);
-      const javaChanged = (javaRow?.value ?? '') !== plan.javaHome;
+      const javaChanged = plan.javaHome !== null && (javaRow?.value ?? '') !== plan.javaHome;
       return { devRoot: req.devRoot, warnings: check.warnings, willAdd: merged.appended, javaHome: plan.javaHome, noop: !merged.changed && !javaChanged };
     }),
   );
@@ -315,7 +320,8 @@ export function registerIpc(): void {
       ensureDevRoot(req.devRoot); // 建 tools/current/cache(§5)
       s.setDevRoot(req.devRoot); // 先落盘,使后续 downloader()/ctx() 可用
       const t0 = Date.now();
-      const r = await s.env.applyPlan(envPlan(req.devRoot)); // §7.2 四步
+      const plan = envPlanForInstalls(req.devRoot, s.store.load().installs, [...s.catalogs().values()]);
+      const r = await s.env.applyPlan(plan); // §7.2 四步
       s.history.append({ kind: 'env_write', ok: true, durationMs: Date.now() - t0, detail: { changed: r.changed, devRoot: req.devRoot }, backupFile: r.backupFile ?? undefined });
       return { applied: r.changed, broadcast: r.broadcast, backupFile: r.backupFile };
     }),
@@ -333,6 +339,11 @@ export function registerIpc(): void {
 }
 
 // ---------------------------------------------------------------- 共享小工具
+
+/** ◇C3:按当前 installs 登记 + 全部 catalog 在管条目生成动态受管计划(安装/接管自动接入,卸载/移出登记自动断开) */
+function dynamicPlanOf(s: Services, devRoot: string): EnvPlan {
+  return envPlanForInstalls(devRoot, s.store.load().installs, [...s.catalogs().values()]);
+}
 
 /** 登记记录 → 线上 DTO(install:list 与 F1 的 install:adopt 共用;origin 缺省按 'download') */
 function installView(i: InstallRecord): InstallView {
@@ -354,18 +365,18 @@ async function envState(s: Services): Promise<EnvStateView> {
   const backups = s.env.listBackups().map((b) => ({ ts: b.ts, file: b.file, names: b.names, scope: b.scope }));
   if (!devRoot) return { devRoot: null, wired: false, entries: [], backups };
   const rows = await s.env.readAll();
-  const entries = managedEntries(devRoot, rows);
+  const entries = managedEntries(devRoot, rows, dynamicPlanOf(s, devRoot));
   return { devRoot, wired: entries.every((e) => e.present), entries, backups };
 }
 
 /**
- * 受管区装配(env:state 与 env:audit 共用):
+ * 受管区装配(env:state 与 env:audit 共用;◇C3:条目 = 在管工具的动态计划):
  * present = 用户 PATH 等值含该项 / JAVA_HOME 值等于 plan;
  * targetOk = 目标目录存在(%VAR% 按注册表 JAVA_HOME 现值展开)——
- * 决策 A:present✓ 而 targetOk✗ 即"⚠ 失效/悬空"(装了 Maven 未装 JDK 等),只暴露不规避。
+ * present✓ 而 targetOk✗ 即"⚠ 失效"(如 current 链路被断);jdk 未在管 → 无 JAVA_HOME 行(不再悬空)。
+ * 只消费装配,判定语义全在 core(动态计划 = install.ts envPlanForInstalls)。
  */
-function managedEntries(devRoot: string, rows: EnvVar[]): ManagedEntryView[] {
-  const plan = envPlan(devRoot);
+function managedEntries(devRoot: string, rows: EnvVar[], plan: EnvPlan): ManagedEntryView[] {
   const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
   const javaRow = rows.find((r) => r.name.toLowerCase() === 'java_home');
   const parts = splitPathList(pathRow?.value ?? '');
@@ -378,13 +389,15 @@ function managedEntries(devRoot: string, rows: EnvVar[]): ManagedEntryView[] {
     present: parts.some((p) => pathEntryEquals(p, pe)),
     targetOk: existsSync(expandPathVars(pe, envMap)),
   }));
-  entries.push({
-    label: 'JAVA_HOME',
-    kind: 'java_home',
-    value: plan.javaHome,
-    present: (javaRow?.value ?? '') === plan.javaHome,
-    targetOk: existsSync(plan.javaHome), // 悬空 JDK 链:junction 不存在 → false
-  });
+  if (plan.javaHome !== null) {
+    entries.push({
+      label: 'JAVA_HOME',
+      kind: 'java_home',
+      value: plan.javaHome,
+      present: (javaRow?.value ?? '') === plan.javaHome,
+      targetOk: existsSync(plan.javaHome), // 悬空 JDK 链:junction 不存在 → false
+    });
+  }
   return entries;
 }
 

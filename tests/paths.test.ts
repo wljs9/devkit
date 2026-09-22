@@ -4,7 +4,6 @@ import {
   checkDevRoot,
   currentLinkPath,
   defaultDevRoot,
-  envPlan,
   expandPathVars,
   joinPathList,
   mergePathEntries,
@@ -56,22 +55,20 @@ describe('布局与目录名安全', () => {
 });
 
 describe('PATH 条目代数', () => {
-  it('envPlan 固定三条且指向 current 层(产品文档 §6)', () => {
-    const plan = envPlan('D:\\dev');
-    expect(plan.pathEntries).toEqual(['D:\\dev\\current\\node', 'D:\\dev\\current\\maven\\bin', '%JAVA_HOME%\\bin']);
-    expect(plan.javaHome).toBe('D:\\dev\\current\\jdk');
+  it('current 层 junction 路径形态(◇C3:受管条目的落点,切换版本该路径不变)', () => {
     expect(currentLinkPath('D:\\dev', 'jdk')).toBe('D:\\dev\\current\\jdk');
+    expect(currentLinkPath('D:\\dev', 'maven')).toBe('D:\\dev\\current\\maven');
   });
-  it('merge 幂等:重复安装不产生重复条目(§7.2②),大小写/尾斜杠视为相同', () => {
-    const plan = envPlan('D:\\dev');
-    const first = mergePathEntries('C:\\Windows', plan.pathEntries);
+  it('merge 幂等:重复接入不产生重复条目(§7.2②),大小写/尾斜杠视为相同', () => {
+    const pathEntries = ['D:\\dev\\current\\node', 'D:\\dev\\current\\maven\\bin', '%JAVA_HOME%\\bin'];
+    const first = mergePathEntries('C:\\Windows', pathEntries);
     expect(first.changed).toBe(true);
     expect(first.appended.length).toBe(3);
     const doubled = joinPathList([first.value.toUpperCase(), 'C:\\Other\\']);
-    const second = mergePathEntries(doubled, plan.pathEntries);
+    const second = mergePathEntries(doubled, pathEntries);
     expect(second.changed).toBe(false);
     expect(second.value).toBe(doubled);
-    const trailing = mergePathEntries('D:\\dev\\current\\maven\\bin\\;', plan.pathEntries);
+    const trailing = mergePathEntries('D:\\dev\\current\\maven\\bin\\;', pathEntries);
     expect(trailing.changed).toBe(true); // node 与 %JAVA_HOME%\bin 仍缺
     expect(splitPathList(trailing.value).length).toBe(3); // maven\bin 不因尾斜杠重复
     expect(pathEntryEquals('D:\\A\\B', 'd:\\a\\b\\')).toBe(true);

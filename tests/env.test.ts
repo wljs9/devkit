@@ -5,7 +5,6 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EnvService, SANDBOX_REG_KEY, SYSTEM_REG_KEY, assertSystemPathEntry, encodePowerShellCommand, psLiteral, type EnvApplyResult, type EnvVar, type ExecFileFn } from '../src/main/core/env';
-import { envPlan } from '../src/main/core/paths';
 
 const FAKE_PS = '# fake env.ps1 for mock tests\n';
 
@@ -40,7 +39,8 @@ beforeEach(() => {
 });
 
 const readRows = (rows: EnvVar[]) => JSON.stringify(rows); // Get-Env 的 stdout 形状
-const PLAN = envPlan('D:\\dev');
+/** 动态受管计划(◇C3):路径由 install.ts envPlanForInstalls 生成,这里只测 env 侧写入协议的原样消费 */
+const PLAN = { javaHome: 'D:\\dev\\current\\jdk', pathEntries: ['D:\\dev\\current\\node', 'D:\\dev\\current\\maven\\bin', '%JAVA_HOME%\\bin'] };
 
 describe('EncodedCommand 协议(§7.1)', () => {
   it('参数形态固定,脚本整体 UTF-16LE 编码', async () => {
@@ -85,6 +85,21 @@ describe('applyPlan 写入协议(§7.2 四步)', () => {
     expect(r.changed).toEqual([]);
     expect(r.backupFile).toBeNull();
     expect(calls.length).toBe(1); // 只有 readAll
+  });
+
+  it('◇C3:javaHome=null(未在管 JDK)→ 只并 PATH,不写也不删 JAVA_HOME(用户可能自设别的值)', async () => {
+    const rows = [
+      { name: 'Path', kind: 'ExpandString', value: 'C:\\Windows' },
+      { name: 'JAVA_HOME', kind: 'ExpandString', value: 'C:\\Program Files\\Java\\jdk-21' },
+    ];
+    const { calls, fn } = mockExec((c) => (c.includes('Get-Env') ? readRows(rows) : 'OK\nBROADCAST_OK'));
+    const svc = svcWith(fn, userData);
+    const r = await svc.applyPlan({ javaHome: null, pathEntries: ['D:\\dev\\current\\node'] });
+    expect(r.changed).toEqual(['Path']);
+    const write = calls[1]!.calls;
+    expect(write).toContain("Set-Env -Key 'Environment' -Name 'Path'");
+    expect(write).not.toContain('JAVA_HOME'); // 用户另设的 JAVA_HOME 原样保留
+    expect(r.backupFile).toBeTruthy(); // ①快照照常
   });
 
   it('写入中途失败(PS 脚本半程崩溃)→ 用快照还原已变更项并 rethrow(§7.2④)', async () => {
@@ -172,6 +187,37 @@ describe('applyRemoval(§4.4 清理:§7.2 四步应用于删除方向)', () => {
     const svc = svcWith(fn, userData);
     await expect(svc.applyRemoval(['D:\\junk\\x'])).rejects.toThrowError(/boom/);
     expect(calls.at(-1)!.calls).toContain(`-Value '${RAW}' -Kind ExpandString`); // 还原为快照原值
+  });
+});
+
+describe('removeJavaHome(◇C3:卸载/移出登记 JDK 后回收本工具写入的 JAVA_HOME)', () => {
+  it('现值 == 本工具设置(current\\jdk 形态)→ 快照→Remove-Env→广播', async () => {
+    const rows = [{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'D:\\dev\\current\\jdk' }];
+    const { calls, fn } = mockExec((c) => (c.includes('Get-Env') ? readRows(rows) : 'OK\nBROADCAST_OK'));
+    const svc = svcWith(fn, userData);
+    const r = await svc.removeJavaHome('D:\\dev\\current\\jdk');
+    expect(r).toEqual({ changed: ['JAVA_HOME'], backupFile: expect.any(String) as unknown as string, broadcast: 'ok' });
+    const write = calls[1]!.calls;
+    expect(write).toContain(`Remove-Env -Key 'Environment' -Name 'JAVA_HOME'`);
+    expect(write).toContain('Publish-EnvChange');
+    const backup = JSON.parse(fs.readFileSync(r.backupFile!, 'utf8')) as { rows: EnvVar[] };
+    expect(backup.rows).toEqual(rows); // ①快照 = 删除前全量
+  });
+
+  it('现值 != 期望(用户后来改指别处)→ 零执行,不删用户另设的值', async () => {
+    const rows = [{ name: 'JAVA_HOME', kind: 'ExpandString', value: 'C:\\Program Files\\Java\\jdk-21' }];
+    const { calls, fn } = mockExec(() => readRows(rows));
+    const svc = svcWith(fn, userData);
+    const r = await svc.removeJavaHome('D:\\dev\\current\\jdk');
+    expect(r).toEqual({ changed: [], backupFile: null, broadcast: null });
+    expect(calls.length).toBe(1); // 只读了,没删
+  });
+
+  it('本无 JAVA_HOME → 零执行', async () => {
+    const { calls, fn } = mockExec(() => readRows([{ name: 'Path', kind: 'ExpandString', value: '' }]));
+    const svc = svcWith(fn, userData);
+    expect((await svc.removeJavaHome('D:\\dev\\current\\jdk')).changed).toEqual([]);
+    expect(calls.length).toBe(1);
   });
 });
 

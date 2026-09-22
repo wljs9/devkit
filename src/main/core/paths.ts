@@ -93,29 +93,17 @@ function assertToolId(id: string): void {
   }
 }
 
-// ---------------------------------------------------------------- 用户 PATH 条目(产品文档 §6:终身 3 条)
+// ---------------------------------------------------------------- 用户 PATH 条目(◇C3:装什么管什么 —— 受管条目随在管工具动态生成)
 
 export interface EnvPlan {
-  /** JAVA_HOME 的值(指向 current\jdk 的绝对路径) */
-  javaHome: string;
-  /** 追加进用户 PATH 的固定条目(顺序稳定,幂等合并用) */
+  /**
+   * JAVA_HOME 的值(指向 current\jdk 的绝对路径);null = 当前不在管 JDK,applyPlan 跳过该分支。
+   * ★C3(2026-09-21 用户新提,推翻 M3 决策 A"固定 3 条"):装了/接管了 jdk 才写,
+   * 没装 jdk 就不再写 —— "装了 Maven 没装 JDK → JAVA_HOME 悬空"从根上消失。
+   */
+  javaHome: string | null;
+  /** 追加进用户 PATH 的受管条目(顺序稳定,幂等 merge 用;jdk 管的是字面 %JAVA_HOME%\bin) */
   pathEntries: string[];
-}
-
-/**
- * 三条 PATH 条目 = <DevRoot>\current\node、<DevRoot>\current\maven\bin、%JAVA_HOME%\bin。
- * 前两条用绝对路径(DevRoot 固定后不随变量解析变化,幂等判定精确);
- * 第三条按产品文档 §6 以 %JAVA_HOME% 引用(REG_EXPAND_SZ 由注册表类型保证,§7.1)。
- */
-export function envPlan(devRoot: string): EnvPlan {
-  return {
-    javaHome: currentLinkPath(devRoot, 'jdk'),
-    pathEntries: [
-      currentLinkPath(devRoot, 'node'),
-      join(currentLinkPath(devRoot, 'maven'), 'bin'),
-      '%JAVA_HOME%\\bin',
-    ],
-  };
 }
 
 // ---------------------------------------------------------------- PATH 字符串代数(纯函数,可测)
@@ -204,7 +192,7 @@ export interface PathAuditRow {
   missing: boolean;
   /** 有效 PATH(系统→用户拼接)中出现 ≥2 次 */
   duplicated: boolean;
-  /** 命中本工具 envPlan 固定条目 → 归"受管区"展示,外部区/UI 负责过滤 */
+  /** 命中调用方传入的受管条目(◇C3:install.ts 按在管工具动态生成) → 归"受管区"展示,外部区/UI 负责过滤 */
   managed: boolean;
 }
 

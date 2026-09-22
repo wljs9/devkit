@@ -138,13 +138,14 @@ export interface EnvStateView {
   backups: { ts: string; file: string; names: string[]; scope: 'user' | 'system' }[];
 }
 
-/** Setup 向导第 2 步:PATH diff 预览(§4.0 "展示改前/改后") */
+/** Setup 向导第 2 步:PATH diff 预览(§4.0 "展示改前/改后";◇C3:计划 = 当前在管工具的动态集合) */
 export interface SetupPlanView {
   devRoot: string;
   warnings: string[];
-  /** 将新增的 PATH 条目 */
+  /** 将新增的 PATH 条目(在管工具尚未接入的,幂等 merge 只补缺失) */
   willAdd: string[];
-  javaHome: string;
+  /** JDK 在管时的 JAVA_HOME 值(current\jdk);null = 未在管 JDK,本次不写("装什么管什么",§6) */
+  javaHome: string | null;
   /** 现状已一致 → 无需写(幂等,零副作用) */
   noop: boolean;
 }

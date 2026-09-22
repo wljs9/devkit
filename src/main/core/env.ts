@@ -166,13 +166,14 @@ export class EnvService {
   /**
    * §7.2 不可绕过的四步:①快照 → ②计算(envPlan/mergePathEntries 幂等) → ③写入+广播 → ④失败还原并 rethrow。
    * 无任何变化时不写不备份(幂等:重复"接入环境"零副作用)。
+   * ★C3(2026-09-21):plan.javaHome 为 null 表示当前不在管 JDK —— 不写不删 JAVA_HOME(绝不动用户可能自设的变量)。
    */
   async applyPlan(plan: EnvPlan): Promise<EnvApplyResult> {
     const rows = await this.readAll();
     const pathRow = rows.find((r) => r.name.toLowerCase() === 'path');
     const javaRow = rows.find((r) => r.name.toLowerCase() === 'java_home');
     const merged = mergePathEntries(pathRow?.value ?? '', plan.pathEntries);
-    const javaChanged = (javaRow?.value ?? '') !== plan.javaHome;
+    const javaChanged = plan.javaHome !== null && (javaRow?.value ?? '') !== plan.javaHome;
     if (!merged.changed && !javaChanged) return { changed: [], backupFile: null, broadcast: null };
 
     const backupFile = this.writeBackup(rows);
@@ -183,7 +184,7 @@ export class EnvService {
       changed.push('Path');
     }
     if (javaChanged) {
-      calls.push(`Set-Env -Key ${psLiteral(this.regKey)} -Name 'JAVA_HOME' -Value ${psLiteral(plan.javaHome)} -Kind ExpandString`);
+      calls.push(`Set-Env -Key ${psLiteral(this.regKey)} -Name 'JAVA_HOME' -Value ${psLiteral(plan.javaHome!)} -Kind ExpandString`);
       changed.push('JAVA_HOME');
     }
     calls.push('Publish-EnvChange');
@@ -219,6 +220,32 @@ export class EnvService {
     try {
       const out = await this.runPowerShell(calls);
       return { changed: ['Path'], removed: res.removed, backupFile, broadcast: broadcastOf(out) };
+    } catch (e) {
+      try {
+        await this.restoreTo(rows);
+      } catch (restoreErr) {
+        if (e instanceof CoreError) e.context = { ...e.context, restoreAlsoFailed: String(restoreErr) };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * ◇C3(2026-09-21):卸载/移出登记 JDK 且无剩余版本时,回收本工具写入的 JAVA_HOME。
+   * **只删"现值恰为本工具设置值"的 JAVA_HOME**(当前\jdk 形态)——用户后来改指别处的就不动,
+   * 红线 §3.3"绝不删非本工具名下"的变量层延伸。§7.2 四步:快照→删→广播→失败还原。
+   */
+  async removeJavaHome(expected: string): Promise<EnvApplyResult> {
+    const rows = await this.readAll();
+    const row = rows.find((r) => r.name.toLowerCase() === 'java_home');
+    if (!row || row.value !== expected) return { changed: [], backupFile: null, broadcast: null };
+    const backupFile = this.writeBackup(rows);
+    const calls = [
+      `Remove-Env -Key ${psLiteral(this.regKey)} -Name 'JAVA_HOME'`,
+      'Publish-EnvChange',
+    ];
+    try {
+      return { changed: ['JAVA_HOME'], backupFile, broadcast: broadcastOf(await this.runPowerShell(calls)) };
     } catch (e) {
       try {
         await this.restoreTo(rows);

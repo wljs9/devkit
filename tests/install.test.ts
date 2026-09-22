@@ -6,12 +6,13 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogEntrySchema, type CatalogEntry, type DiscoveredVersion } from '../src/main/core/catalog';
 import { Downloader } from '../src/main/core/download';
+import { type EnvService } from '../src/main/core/env';
 import { HistoryLog } from '../src/main/core/history';
 import { removeJunction } from '../src/main/core/junction';
-import { ensureDevRoot, install, orderChecksumUrls, resolveOpenableInstallDir, setCurrent, uninstall } from '../src/main/core/install';
+import { ensureDevRoot, install, orderChecksumUrls, resolveOpenableInstallDir, setCurrent, uninstall, envPlanForInstalls, toolManagedContribution, pathEntrySuffixOf } from '../src/main/core/install';
 import type { InstallRecord } from '../src/main/core/store';
 import { currentLinkPath, toolVersionDir } from '../src/main/core/paths';
 import { JsonRepository } from '../src/main/core/store';
@@ -441,5 +442,108 @@ describe('F4 校验与布局泛化', () => {
     const real = toolVersionDir(devRoot, PKG, V1);
     expect(fs.existsSync(path.join(real, `${PKG}.exe`))).toBe(true);
     expect(fs.existsSync(path.join(real, 'Lib', 'os.py'))).toBe(true);
+  });
+});
+
+// ---- ◇C3「装什么管什么」(2026-09-21):受管 PATH 条目随在管工具动态生成 + 装完自动接入 ----
+
+/** 任意工具形夹具(layout/binName 覆盖 PATH 形态) */
+function mkToolEntry(id: string, layout: 'binAtRoot' | 'binSubdir', binName?: string): CatalogEntry {
+  if (id === 'jdk') {
+    // jdk 特例:走 %JAVA_HOME%\bin + JAVA_HOME=current\jdk,不生成 current\jdk\bin
+    const r = CatalogEntrySchema.safeParse({
+      id, displayName: 'Fixture ' + id, listKind: 'dirIndex',
+      dirRegex: '^x/$', fileRegex: '^x.*[.]zip$',
+      sources: [{ id: 'local', listUrl: 'https://x.invalid/', fileUrl: 'https://x.invalid/x-{ver}.zip' }],
+      checksum: { kind: 'officialSidecar', algo: 'sha512', urls: ['https://x.invalid/s'] },
+      rootDir: 'x-{ver}', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+  const r = CatalogEntrySchema.safeParse({
+    id, displayName: 'Fixture ' + id, listKind: 'dirIndex',
+    dirRegex: '^x/$', fileRegex: '^x.*[.]zip$',
+    sources: [{ id: 'local', listUrl: 'https://x.invalid/', fileUrl: 'https://x.invalid/x-{ver}.zip' }],
+    checksum: { kind: 'officialSidecar', algo: 'sha512', urls: ['https://x.invalid/s'] },
+    rootDir: 'x-{ver}', layout, ...(binName ? { binName } : {}),
+  });
+  if (!r.success) throw new Error(r.error.message);
+  return r.data;
+}
+
+/** 假 EnvService:只记录调用(install 侧消费 applyPlan) */
+function envSpy() {
+  return {
+    applyPlan: vi.fn(),
+    applyRemoval: vi.fn(),
+    removeJavaHome: vi.fn(),
+  };
+}
+
+describe('◇C3 动态受管计划(envPlanForInstalls / toolManagedContribution)', () => {
+  const node = mkToolEntry('node', 'binAtRoot');
+  const maven = mkToolEntry('maven', 'binSubdir');
+  const git = mkToolEntry('git', 'binSubdir', 'cmd'); // MinGit 布局:入口在 cmd\
+  const jdk = mkToolEntry('jdk', 'binSubdir');
+  const entries = [node, maven, git, jdk];
+
+  it('单工具:binAtRoot=根、binSubdir=加 bin、binName 覆盖、jdk=JAVA_HOME 特例', () => {
+    expect(envPlanForInstalls('D:\\dev', [{ tool: 'node' }], entries).pathEntries).toEqual(['D:\\dev\\current\\node']);
+    expect(envPlanForInstalls('D:\\dev', [{ tool: 'maven' }], entries).pathEntries).toEqual(['D:\\dev\\current\\maven\\bin']);
+    expect(envPlanForInstalls('D:\\dev', [{ tool: 'git' }], entries).pathEntries).toEqual(['D:\\dev\\current\\git\\cmd']);
+    const j = envPlanForInstalls('D:\\dev', [{ tool: 'jdk' }], entries);
+    expect(j.javaHome).toBe('D:\\dev\\current\\jdk');
+    expect(j.pathEntries).toEqual(['%JAVA_HOME%\\bin']); // 不生成 current\jdk\bin —— 全部由 %JAVA_HOME% 承担
+  });
+
+  it('多工具合并:去重 + catalog 声明序;未登记的工具不产生条目;空 installs → 空计划', () => {
+    const plan = envPlanForInstalls('D:\\dev', [{ tool: 'maven' }, { tool: 'node' }, { tool: 'nope' }], entries);
+    expect(plan.pathEntries).toEqual(['D:\\dev\\current\\node', 'D:\\dev\\current\\maven\\bin']);
+    expect(plan.javaHome).toBeNull();
+    expect(envPlanForInstalls('D:\\dev', [], entries)).toEqual({ javaHome: null, pathEntries: [] });
+  });
+
+  it('jdk 在管 → javaHome 就位,其余在管工具条目照常;toolManagedContribution 单工具口径', () => {
+    const plan = envPlanForInstalls('D:\\dev', [{ tool: 'jdk' }, { tool: 'node' }], entries);
+    expect(plan.javaHome).toBe('D:\\dev\\current\\jdk');
+    expect(plan.pathEntries).toEqual(['D:\\dev\\current\\node', '%JAVA_HOME%\\bin']);
+    expect(toolManagedContribution('D:\\dev', node)).toEqual({ paths: ['D:\\dev\\current\\node'], javaHome: null });
+    expect(toolManagedContribution('D:\\dev', jdk)).toEqual({ paths: ['%JAVA_HOME%\\bin'], javaHome: 'D:\\dev\\current\\jdk' });
+  });
+
+  it('pathEntrySuffixOf:layout 派生目录段(binSubdir→\\bin/\\cmd;binAtRoot→空)', () => {
+    expect(pathEntrySuffixOf(maven)).toBe('\\bin');
+    expect(pathEntrySuffixOf(git)).toBe('\\cmd');
+    expect(pathEntrySuffixOf(node)).toBe('');
+  });
+});
+
+describe('◇C3 装完自动接入(边界①:install 成功后 ctx.env.applyPlan 该工具贡献)', () => {
+  it('下载安装成功(node,binAtRoot)→ applyPlan({javaHome:null, pathEntries:[current\\node]}),且晚于登记/建链', async () => {
+    const entry = await addServer(V1); // 现有 fixture:binAtRoot
+    const applyPlan = vi.fn();
+    await install(entry, verOf(V1), {}, { ...ctx(entry), env: { applyPlan } as unknown as EnvService });
+    expect(applyPlan).toHaveBeenCalledTimes(1);
+    expect(applyPlan).toHaveBeenCalledWith({ javaHome: null, pathEntries: [currentLinkPath(devRoot, PKG)] });
+    // 接入发生在登记后:此刻 installs 已含该记录
+    expect(store.load().installs).toHaveLength(1);
+  });
+
+  it('env 缺省(不注入,现有测试形态)→ 安装成功,零 PATH 写入、零 env_write 历史', async () => {
+    const entry = await addServer(V2);
+    await install(entry, verOf(V2), {}, ctx(entry)); // 无 env
+    expect(store.load().installs).toHaveLength(1);
+    expect(history.list().filter((h) => h.kind === 'env_write')).toEqual([]);
+  });
+
+  it('接入失败不回转安装(文件/登记/链已就位),只记历史 FAIL', async () => {
+    const entry = await addServer(V1);
+    const applyPlan = vi.fn(() => Promise.reject(new Error('registry boom')));
+    const rec = await install(entry, verOf(V1), {}, { ...ctx(entry), env: { applyPlan } as unknown as EnvService });
+    expect(rec.tool).toBe(PKG); // 安装本体成功
+    expect(store.load().installs).toHaveLength(1);
+    const envFail = history.list().find((h) => h.kind === 'env_write');
+    expect(envFail).toMatchObject({ kind: 'env_write', ok: false }); // 接入失败进了历史
   });
 });

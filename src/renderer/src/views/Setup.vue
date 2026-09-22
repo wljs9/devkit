@@ -3,6 +3,8 @@
  * 首跑向导(产品 §4.0),两步:
  *   步骤1 DevRoot:默认探测值 + 校验(reasons 拦截/warnings 提示)+ 将建目录结构预览;
  *   步骤2 PATH diff:setupPreview 展示"改前/改后"→ 确认才 setupRun(§7.2 写入协议在 main 侧)。
+ * ◇C3(2026-09-21"装什么管什么"):动态计划按当前在管工具生成 —— 首跑未装工具时无可接入条目(noop),
+ *   后续安装/接管自动接入,此处仅作能力预览与补齐。
  * 逻辑全在 api$/store,组件哑(§11)。完成/拒绝写 PATH 均可进主界面(黄条常驻)。
  */
 import { computed, onMounted, ref } from 'vue';
@@ -18,7 +20,7 @@ const msg = useMessage();
 const step = ref(1);
 const devRoot = ref('');
 const check = ref<{ ok: boolean; reasons: string[]; warnings: string[] } | null>(null);
-const preview = ref<{ willAdd: string[]; javaHome: string; noop: boolean; warnings: string[] } | null>(null);
+const preview = ref<{ willAdd: string[]; javaHome: string | null; noop: boolean; warnings: string[] } | null>(null);
 const confirmWrite = ref(false);
 const submitting = ref(false);
 const done = ref<{ applied: string[]; broadcast: string | null } | null>(null);
@@ -93,7 +95,7 @@ function skipPath(): void {
     </n-steps>
 
     <n-card v-if="step === 1" :bordered="false" class="setup-card">
-      <p>DevKit 会把工具解压到 DevRoot 下,并只向用户 PATH 添加固定的几条目(终身不变,切换版本零改 PATH)。</p>
+      <p>DevKit 会把工具解压到 DevRoot 下,并采用<b>"装什么管什么"</b>:安装/接管的工具自动接入用户 PATH,切换版本零改 PATH。</p>
       <n-space vertical>
         <div>
           <label>DevRoot 路径:</label>
@@ -115,10 +117,13 @@ function skipPath(): void {
     <n-card v-else-if="step === 2 && preview" :bordered="false">
       <p>DevKit 将对<b>用户级</b>环境变量做如下改动(写入前自动全量备份,失败自动回滚):</p>
       <n-descriptions :column="1" bordered>
-        <n-descriptions-item label="JAVA_HOME">{{ preview.javaHome }}</n-descriptions-item>
+        <n-descriptions-item label="JAVA_HOME">
+          <template v-if="preview.javaHome">{{ preview.javaHome }}</template>
+          <span v-else class="muted">(当前未在管 JDK —— 装了才写,不悬空)</span>
+        </n-descriptions-item>
         <n-descriptions-item label="PATH 新增">
           <div v-for="e in preview.willAdd" :key="e" class="mono diff-add">+ {{ e }}</div>
-          <span v-if="preview.willAdd.length === 0" class="muted">(已存在,无新增)</span>
+          <span v-if="preview.willAdd.length === 0" class="muted">(当前无待接入条目 —— 已装工具的入口都已就位)</span>
         </n-descriptions-item>
       </n-descriptions>
       <n-alert v-for="w in preview.warnings" :key="w" type="warning" style="margin-top: 10px">{{ w }}</n-alert>

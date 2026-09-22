@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 环境页(产品 §4.4):受管区(固定 3 条 + JAVA_HOME,✓正常/⚠失效/✗未接入 —— 决策 A 的暴露面)、
+ * 环境页(产品 §4.4):受管区(◇C3"装什么管什么" —— 条目 = 在管工具动态生成,jdk 在管才有 JAVA_HOME 行,
+ * ✓正常/⚠失效/✗未接入)、
  * PATH 条目体检表(用户 + 系统 + ★F2 并入的本工具受管条目;仅用户级非受管项可勾删,默认不勾选,§3 红线 3)、
  * ★C2(方向 A,2026-09-20)系统 PATH(HKLM)区:由 F3 的"全变量列表 + 增删改"收窄为
  * **只看 + 只追加** —— 展示系统 PATH 条目,开关打开 + 管理员可追加一条;不提供删除/修改
@@ -63,7 +64,7 @@ async function reconnect(): Promise<void> {
     }
     dialog.warning({
       title: '将写入用户环境变量(HKCU,写前自动备份)',
-      content: `新增 PATH:${plan.willAdd.join(' ; ') || '(无)'}\nJAVA_HOME = ${plan.javaHome}`,
+      content: `新增 PATH:${plan.willAdd.join(' ; ') || '(无)'}\nJAVA_HOME = ${plan.javaHome ?? '(未在管 JDK,本次不写)'}`,
       positiveText: '接入',
       negativeText: '取消',
       onPositiveClick: async () => {

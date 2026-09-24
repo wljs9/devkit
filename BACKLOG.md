@@ -175,6 +175,11 @@
 
 ### F6 实况(2026-09-24:评估轮 —— 可继续收录的工具;结论已就绪,待用户拍板)
 
+> **评估范围(用户明确要求按星级定框,勿再自选候选集)**:以《常用工具列表(分星级)》的星级为总框,
+> **每档全量逐一评估**。档间收录量核对:★1 档 9 个工具中 6 个已收(F4:VS Code/Git/Python/Node/JDK/DBeaver),
+> Postman 延后、浏览器跳过、IDEA/PyCharm 已收 → 实收 8;★2 档(包管理器+zip 配 PATH)12 个中 5 个已收
+> (Maven/Gradle/Go/SQLite + 复用 Node)…;本轮已补 ★3 档全量实测(下表),★4/★5 档判断已含在分子档结论里
+> (模型外,一句话各判);后续如需再扩范围(如《开发工具(全)》的语言运行时/IDE 档)由用户点名。
 - **输入**:《功能改进建议.md》2026-09-24 单条"评估一下可以继续添加哪一些工具",结合《常用工具列表(分星级)》《开发工具(全)》。范围已复述确认:**只评估收录可行性,不收录、不动 catalog/门禁**。
 - **收录判据(沿用 F5/F4 先例)**:①国内镜像可用(**PK 魔数/Range 206 验真**,不信状态码 —— 华为云新版目录页是带 UI 壳的真列表,正文含 `<a href>` 才算数,~12KB 无链接=SPA 兜底页);②校验和可获得(官方 sidecar / API 内嵌 SHA3-256·SHA-256·SHA-512 / pinned 回填负担可接受);③单 zip 解压即用 + adopt 模型适配;④配置/初始化成本 ≤ 工具常识(如依赖 JAVA_HOME 属常识,同 Gradle)。
 - **华为云镜像复测(2026-09-24,重要环境事实)**:`/apache/maven/`(38 版本链接 / jmeter / tomcat / ant)**仍真文件**(zip PK 魔数 `504b 0304` 验证),但**新版目录页带 UI 壳且变小**(10~26KB)—— dirIndex 解析应仍兼容(Apache autoindex 语义 + `<a href>` 完整),但**收录新源必须正文 grep 验真**;`/cmake/` 复测确认仍为 ~12KB 无链接 SPA 兜底页(**确证归档**);`/hashicorp/terraform/` 同样 12KB 兜底(**无镜像**)。
@@ -206,8 +211,23 @@
 | Rust | F5 归档维持:需 tar.gz 通道 + MSVC/MinGW,模型外(rustup 专项 v1.x) |
 
 - **⚠ 收录动作前必办(环境事实)**:华为云目录页带 UI 壳,**catalog 收录后必须真机 e2e 验真(PK 魔数/Range 206 + 下载校验)再推**,不能只看目录页 200。
+- **★3 档全量评估(2026-09-24 实测;范围=《分星级》★3 档 7 个,全部"装服务/配端口/账号"类)**:
+
+| 工具 | 镜像可用性(实测) | 校验和可获得性 | 包形态 / 初始化成本 | 结论 |
+|------|------------------|---------------|-------------------|------|
+| MySQL | 华为云 `mysql/Downloads/MySQL-8.0/` winx64 zip 有(8.0.24~29 等,目录真,文件 PK 验真);**华为云只同步到 8.0/5.7 等旧档,8.4/9.x 目录缺失**(根目录 `href` 实测只有 MySQL-4.1~8.0) | **镜像与官方 CDN 都无 `.sha256`/`.sha512` 侧车**(指定版本 8.0.29 的 `zip.sha256` 官方 cdn.mysql.com 实测 404),仅 `.asc`(PGP 签名,无 keyring 无法验证) | noinstall zip 解压后**必须 `mysqld --initialize` 初始化数据目录 + 账号/端口/服务配置**,远超"解压即用" | **不收**(无校验侧车 = 违反 §3.5 红线;且初始化属 v1.2 数据库路线) |
+| PostgreSQL | 华为云 `postgresql/latest/` 仅**源码 tar.bz2/gz**(实测 13.4 等,**无 win 二进制**);清华无 postgresql 镜像(404) | 源码包带 `.sha256`(实测在),但**无可收录的 win zip** | win 二进制只在官方 EDB 安装包(installer 型) | **不收**(无镜像 win 包) |
+| MongoDB | 华为云 `mongodb/` 仅**源码**(实测 0.9.x~1.x zip/tgz);官方 `fastdl.mongodb.org` win zip **直连 206 可达**(8.0.4) | 官方直连,校验未验(无镜像背书) | 官方 zip 解压即用(mongod.exe 在 bin),但需**初始化 data + 启动服务** | **延后**(无镜像 + 服务型,v1.2) |
+| Redis | **官方无 Windows 二进制**(download.redis.io 仅源码 tar.gz);Windows 版仅第三方(tporadowski 5.x,GitHub 依赖) | 第三方无官方校验 | 即便收,也是"服务+端口"模型 | **不收**(无官方 win 包) |
+| Docker Desktop | installer exe,依赖 WSL2/虚拟化 | 不适用 | 系统级安装,与"可携化 zip"模型根本冲突 | **不收** |
+| WSL2 | Windows 系统组件(非可下载 zip) | 不适用 | 需虚拟化 + `wsl --install` | **不收**(系统集成) |
+| Docker Compose | v2 官方单文件 exe(GitHub release) | GitHub 依赖 + 无官方 sidecar | 单文件即用,但依赖 Docker 引擎 | **延后** |
+
+**★3 档结论**:7 个**全部不收** —— 或卡"无校验侧车"(MySQL → §3.5 红线,最硬),或"无国内镜像 win 包"(PG/Mongo/Redis),或"根本不在 zip 模型内"(Docker/WSL2/Compose)。本批属产品文档 §11 **v1.2 数据库/服务路线**(MySQL zip + 初始化向导),本评估不留实现回厂项。
+
+- **★4/★5 档一句话判(范围=《分星级》其余档)**:★★☆☆ 包管理器/压缩包档(Maven/Gradle/Go/SQLite/CMake/Nginx/Tomcat/Rust)、★★★★ Kafka/RabbitMQ/ES/Minikube·Kind/K8s/Jenkins/Nexus/SonarQube、★★★★★ Hadoop 系/CUDA/AI 框架/Android SDK/源码编译 —— 前档 5 收 4 归档(F5,不复述);后两档全部 JVM 集群/GPU/驱动/源码编译型,**模型外不收**,与 ★3 同属 v1.2+ 路线(产品文档 §11)。
 - **建议优先级(供拍板)**:① **JMeter + Ant**(零核心改动,Apache 系同范式,风险最低,先上);② **Tomcat**(需给 catalog.ts 加"两级目录父前缀"小改 —— 动解析核,涉及 core 最敏感区,做之前按流程改前 commit + 补测试);③ .NET SDK(官方单源内嵌 sha512,classic discoveredInline 复用,但镜像优先弱,用户定夺);④ Eclipse/其余暂缓。
-- 状态:**评估完成,待用户拍板收录哪些**;确认后按标准接单流程(复述范围 → 登记 → 改前 commit → 实现+补测试 → 门禁 → dist → 走查 → push)。
+- 状态:**评估完成(★3 全量实测 + 其余档归档),待用户拍板收录哪些**;确认后按标准接单流程(复述范围 → 登记 → 改前 commit → 实现+补测试 → 门禁 → dist → 走查 → push)。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

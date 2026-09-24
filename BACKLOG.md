@@ -5,7 +5,8 @@
 > **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1–C3 全部完成并推送
 > (C1/C2 = v1.4.0 已发 2026-09-20;●C3「装什么管什么」动态受管 PATH = 2026-09-21 用户新提,
 > 2026-09-22 走查通过 + 推送 commit `e33a892`,门禁 188/188,详见「C3 实况」)。
-> 当前活待办 = 「F5 未收录工具」节(Tomcat/Nginx/CMake/Rust 发落)。新会话先读 `CLAUDE.md` 启动指引,再回本表。**
+> **当前活待办 = F6 评估轮(可继续收录的工具,2026-09-24 用户新提,见下表 F6 行 + 文末「F6 实况」)。**
+> 新会话先读 `CLAUDE.md` 启动指引,再回本表。**
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -66,6 +67,7 @@
 | C1 | 改进 | **设置页移除「镜像源优先级」区块**(《功能改进建议.md》2026-09-20 第 1 条):用户已可在商店版本行自选源,此区随工具增多挤压设置页空间。范围(实现时定):UI 整段移除 + `SettingsView.sourcePriority`/`ToolCardView.sourceIds` 契约删除 + prefsFor 停读;**ghproxy 加速器前缀保留**(挪入网络卡,风险登记 §12 要求可换/可关);catalog.ts 的 priority 通用原语与单测不动。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
 | C2 | 改进 | **环境页「系统环境变量(HKLM)」区 → 方向 A 已拍板(2026-09-20 用户)**:区改名「系统 PATH(HKLM)」,只列系统 PATH 条目(可看);**可追加一条**(开关开+管理员);**不提供修改/删除**(用户到 Windows 系统设置手动做);F3 的自定义变量表与增删改、`env:system-set/remove` 通道、core `applySystemVarSet/Remove` 全下线,新增 `applySystemPathAdd` + `env:system-path-add`;安全复查发现并修复 1 Medium(readSystemVars 降级空表可致单条覆写整个 PATH → fail-closed)。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
 | C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool><bin|binName>` 按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠;**装了 jdk 才写 JAVA_HOME(悬空根治)**。边界已全部确认(接单时):①装完自动接入;②接管同权自动接入;③JAVA_HOME 装 jdk 才写;④快照全量恢复照旧。**验收:安装/接管即自动接入(新终端直接用)、卸载/移出登记自动断开、环境页受管区随在管工具逐条展示、JAVA_HOME 不再悬空、切换版本依旧零 PATH 变动。** | ✅ 完成并推送 2026-09-22 · commit `e33a892`(见 C3 实况) |
+| F6 | 评估轮 | **评估可继续收录的工具**(《功能改进建议.md》2026-09-24 新条;输入=《常用工具列表(分星级)》《开发工具(全)》):对候选工具分档评估 —— ①国内镜像可用性(**PK 魔数/Range 206 验真**);②校验和可获得性(官方 sidecar / API 内嵌 / pinned 回填负担);③单 zip 解压即用模型适配(含 adopt);④配置/初始化成本。**产出:分档评估归档 + 建议收录优先级清单,回写 BACKLOG/F6 实况,待用户拍板后再进实现轮。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-09-24(结论见 F6 实况,待用户拍板) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -170,6 +172,42 @@
 | Nginx | 困难 | 国内四镜像无 win 包(TUNA/USTC/阿里/腾讯 404 或缺),仅官方 nginx.org(137KB/s);官方只发 PGP `.asc` 不发哈希 → pinnedHash 持续回填;官方自述 Windows 版"仅开发测试用" | 官方 Windows 版定位改变,或用户接受慢速单源 + 回填负担 |
 | CMake | 困难 | **四个国内镜像全无**(TUNA/USTC/阿里/腾讯 cmake 目录 404;华为云 /cmake/ 已下架为 SPA 兜底页),官方 cmake.org 直连 41KB/s;官方按版本发 `*-SHA-256.txt` 校验齐全 | 出现境内镜像(如 Kitwareware CDN 合作),或用户接受违背"镜像优先"支柱的慢速单源 |
 | Rust | 不收 | 官方/USTC 有 tar.gz + sha256,但解压链要新增 tar.gz 通道,且真正可用还需 MSVC Build Tools/MinGW——超出"单 zip 解压即用"模型 | rustup 发行方案专项设计(v1.x 路线图),单包收录无意义 |
+
+### F6 实况(2026-09-24:评估轮 —— 可继续收录的工具;结论已就绪,待用户拍板)
+
+- **输入**:《功能改进建议.md》2026-09-24 单条"评估一下可以继续添加哪一些工具",结合《常用工具列表(分星级)》《开发工具(全)》。范围已复述确认:**只评估收录可行性,不收录、不动 catalog/门禁**。
+- **收录判据(沿用 F5/F4 先例)**:①国内镜像可用(**PK 魔数/Range 206 验真**,不信状态码 —— 华为云新版目录页是带 UI 壳的真列表,正文含 `<a href>` 才算数,~12KB 无链接=SPA 兜底页);②校验和可获得(官方 sidecar / API 内嵌 SHA3-256·SHA-256·SHA-512 / pinned 回填负担可接受);③单 zip 解压即用 + adopt 模型适配;④配置/初始化成本 ≤ 工具常识(如依赖 JAVA_HOME 属常识,同 Gradle)。
+- **华为云镜像复测(2026-09-24,重要环境事实)**:`/apache/maven/`(38 版本链接 / jmeter / tomcat / ant)**仍真文件**(zip PK 魔数 `504b 0304` 验证),但**新版目录页带 UI 壳且变小**(10~26KB)—— dirIndex 解析应仍兼容(Apache autoindex 语义 + `<a href>` 完整),但**收录新源必须正文 grep 验真**;`/cmake/` 复测确认仍为 ~12KB 无链接 SPA 兜底页(**确证归档**);`/hashicorp/terraform/` 同样 12KB 兜底(**无镜像**)。
+- **分档结论(实测依据)**:
+
+**A 档 · 推荐收录(Apache 系三件,零或极小核心改动)** —— 与 Maven 同发布范式,镜像 + 官方跨域 sha512 侧车全齐,验证方式即收录时 e2e 真下载:
+
+| 工具 | 档位(用户文档) | 实测依据(2026-09-24) | 收录前置 |
+|------|------|----------------------|----------|
+| **JMeter**(apache-jmeter) | ★★☆(下载简单需配环境变量) | 华为云 `apache/jmeter/binaries/` 真(zip PK 通过);USTC apache 真;官方 `archive.apache.org/dist/jmeter/binaries/…zip.sha512` 200(154B)侧车在,镜像无侧车 → **同 Maven 跨域背书范式**(orderChecksumUrls);layout=`binSubdir`(bin\jmeter.bat),依赖 JAVA_HOME 属工具常识 | **零核心改动**,catalog JSON 一份即可 |
+| **Ant**(apache-ant) | ★☆☆(同上档弱) | 华为云 `apache/ant/binaries/` 真目录(25KB);同 ASF 发布范式,官方 archive `.sha512` 侧车预期在(收录时 e2e 验);layout=binSubdir(bin\ant.bat),依赖 JAVA_HOME | **零核心改动**;价值低于 JMeter(现代构建多用 Maven/Gradle) |
+| **Tomcat**(apache-tomcat) | ★★☆ | 华为云 `apache/tomcat/tomcat-11/v11.0.26/bin/` 真(win-x64.zip PK 通过);清华/USTC tomcat 均在;**镜像 bin/ 无 .sha512 侧车 → 走官方 archive `.sha512` 跨域**(测过 200,167B);依赖 JAVA_HOME 属常识 | **F5 归档结论维持**:目录两级嵌套 `tomcat-11/{ver}/bin/`,需 catalog.ts dirIndex 支持**父目录前缀扫描**或用户确认只收单一主版本线(tomcat-10/11 并存) |
+
+**B 档 · 可收但镜像/价值打折**:`.NET SDK`(官方 `builds.dotnet.microsoft.com` zip 206 直连,**无国内镜像**;校验=官方 `release-metadata/{channel}/releases.json` **内嵌 SHA-512**(128 位 hex,与 Go discoveredInline 同范式,零核心改动)`,`但镜像优先弱、包大 ~200MB,优先级中;**Eclipse IDE**(USTC → 302 至 `mirror.nju.edu.cn/eclipse` 真,NJU 镜像;官方 `download.eclipse.org` SHA512SUMS 侧车在;IDE 已有 IDEA/PyCharm/VS Code,边际价值一般,大包,优先级低)。
+
+**C 档 · 明确不收 / 延后(镜像缺、模型外或 installer 型,2~3 行一句话即可鉴别)**:
+
+| 工具 | 判据 |
+|------|------|
+| MySQL / PostgreSQL / MongoDB / Redis | 服务型 ★★★:需初始化(initdb/mysqld --initialize)、服务/账号/端口 → 超出"单 zip 解压即用"模型,属产品文档 §11 v1.2 数据库路线,本评估不展开 |
+| Docker Desktop / WSL2 / Minikube / Kind / K8s / Kafka / RabbitMQ / Elasticsearch / Jenkins / Nexus / SonarQube / Hadoop 系 | ★★★★+ 集群/服务/大内存/JDK 重依赖,模型外;Jenkins 是 war,非 zip 即用 |
+| Nginx / CMake | F5 已归档 + 复测确认保持:Nginx 无 win 镜像 + 官方只发 PGP;CMake 四镜像无(华为云 /cmake/ 明确 12KB SPA 兜底) |
+| Terraform / Prometheus | 无国内镜像实测:华为云 `/hashicorp/*` 12KB 兜底、清华 hashicorp 404;Prometheus 清华 404、华为云 12KB 兜底;镜像优先支柱不满足 → 延后 |
+| Grafana | 清华 /grafana/ 13.8KB 无版本链接(疑空/兜底);镜像不可靠 → 延后 |
+| Postman / Apifox / Insomnia / Wireshark / nmap | installer(exe/msi)型,非 zip;Postman F4 已归档版本 API 残缺 |
+| SVN / GCC·Clang·MSVC / MinGW / Make / MSBuild / conda / sdkman / nvm 系 | Windows 二进制为 TortoiseSVN(msi)或依赖 MSYS2/WSL 环境、或与本工具功能重叠(nvm 管 Node 版本=DevKit 自己做的事,收录即 self-dogfood 冲突) |
+| Neovim / Android Studio | GitHub release 依赖(加速器)+ 无官方 sidecar → pinned 回填负担重;Android Studio 需 google 源多镜像,收益一般 |
+| Chrome / Firefox / WebStorm / GoLand / CLion | 浏览器 F4 已跳过;JetBrains 商业 IDE 无 CE zip(评估版有期限)不收录;各类语言对接 CLI(NuGet/Cargo/Composer)随运行时自理不收录 |
+| Rust | F5 归档维持:需 tar.gz 通道 + MSVC/MinGW,模型外(rustup 专项 v1.x) |
+
+- **⚠ 收录动作前必办(环境事实)**:华为云目录页带 UI 壳,**catalog 收录后必须真机 e2e 验真(PK 魔数/Range 206 + 下载校验)再推**,不能只看目录页 200。
+- **建议优先级(供拍板)**:① **JMeter + Ant**(零核心改动,Apache 系同范式,风险最低,先上);② **Tomcat**(需给 catalog.ts 加"两级目录父前缀"小改 —— 动解析核,涉及 core 最敏感区,做之前按流程改前 commit + 补测试);③ .NET SDK(官方单源内嵌 sha512,classic discoveredInline 复用,但镜像优先弱,用户定夺);④ Eclipse/其余暂缓。
+- 状态:**评估完成,待用户拍板收录哪些**;确认后按标准接单流程(复述范围 → 登记 → 改前 commit → 实现+补测试 → 门禁 → dist → 走查 → push)。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

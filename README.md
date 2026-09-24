@@ -2,7 +2,7 @@
 
 Windows 桌面工具:从**国内镜像**(华为云 / 清华 TUNA / 中科大 USTC / 腾讯云等)高速下载开发工具
 (JDK Temurin / Node.js / Maven / Python / Git / VS Code / IntelliJ IDEA / PyCharm / DBeaver /
-Gradle / Go / SQLite),
+Gradle / Go / SQLite / Apache JMeter / Apache Ant / Apache Tomcat / .NET SDK),
 **可携化安装、秒级多版本切换**,并以
 "单入口 PATH + Junction + 历史回滚"的方式让环境变量永远干净。
 
@@ -24,7 +24,7 @@ Gradle / Go / SQLite),
 
 ### 添加已有安装(接管本机既有目录)
 
-机器上已经装好的 JDK / Node / Maven / Python / Git / VS Code / IDEA / DBeaver / Gradle / Go / SQLite 等(如 `C:\Program
+机器上已经装好的 JDK / Node / Maven / Python / Git / VS Code / IDEA / DBeaver / Gradle / Go / SQLite / JMeter / Ant / Tomcat / .NET 等(如 `C:\Program
 Files\nodejs`、`C:\Program Files\Java\jdk-21`)可以直接「已安装 → ＋添加已有安装」纳入管理:选工具 +
 选目录,主进程按清单规则**校验目录并识别版本**,登记后 `current\<tool>` 指向它,于是也能 `/切换版本`。
 接管**不复制、不移动、不删除**原目录里的任何文件,不想要了用 [移出登记] 摘掉记录即可(文件原样保留)。
@@ -87,7 +87,7 @@ pnpm dist   # typecheck → test → build → NSIS 安装包(release/devkit-set
 ## 已知边界(v0.x / MVP)
 
 - 仅支持 **Windows 10/11 x64**;日常运行**不需要管理员**;
-- 收录工具:Node.js、JDK (Temurin)、Maven、Python、Git (MinGit)、VS Code、IntelliJ IDEA CE、PyCharm CE、DBeaver、Gradle、Go、SQLite (CLI 工具);
+- 收录工具:Node.js、JDK (Temurin)、Maven、Python、Git (MinGit)、VS Code、IntelliJ IDEA CE、PyCharm CE、DBeaver、Gradle、Go、SQLite (CLI)、Apache JMeter、Apache Ant、Apache Tomcat、.NET SDK;
   - 多版本:Node/Maven/JDK/Gradle/Go 全量历史版(各留最新 10 版展示);Python/DBeaver/SQLite 各留最新数版;Git/VS Code 镜像源只留最新稳定版;
   - 校验与更新口径:官方发 sidecar 的直接取(Gradle=官方 `.sha256`、JetBrains、Maven=官方 `.sha512`);API 内嵌的随发现携带(JDK=Adoptium API、Go=官方 dl API);官方不发布的走清单内嵌哈希表(Python/Git/DBeaver/VS Code/SQLite,发新版例行更新,**下载永远校验**,未收录版本拒装);
   - Gradle 运行依赖本机 JAVA_HOME(`gradle` 命令才能跑,安装本身不需要);SQLite 收录的是命令行工具包(sqlite3/sqldiff 等,不含 GUI 与 sqlite3.dll);

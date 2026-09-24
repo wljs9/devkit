@@ -2,11 +2,11 @@
 
 > 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2);2026-09-21(C3 登记待接单)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
-> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1–C3 全部完成并推送
-> (C1/C2 = v1.4.0 已发 2026-09-20;●C3「装什么管什么」动态受管 PATH = 2026-09-21 用户新提,
-> 2026-09-22 走查通过 + 推送 commit `e33a892`,门禁 188/188,详见「C3 实况」)。
-> **当前活待办 = F6 评估轮(可继续收录的工具,2026-09-24 用户新提,见下表 F6 行 + 文末「F6 实况」)。**
-> 新会话先读 `CLAUDE.md` 启动指引,再回本表。**
+> **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1–C3 全部完成;**F6 评估 + 实现轮已全部完成并发布
+> (2026-09-24:评估 ★3 档 + 收录 4 工具 JMeter/Ant/Tomcat/.NET SDK → 走查通过 → push → **Release v1.6.0**;
+> 商店 16 工具,门禁 192/192;详见文末「F6 实况」)。**
+> **当前活待办 = P2 用户清单(空)+ B 档剩余发落(.NET 镜像例外接受与否 / Eclipse 收录价值)+ pinned 发新版例行回填(F4 ③条)。**
+> 新会话先读 `CLAUDE.md` 启动指引,再回本表。
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
 
@@ -68,7 +68,7 @@
 | C2 | 改进 | **环境页「系统环境变量(HKLM)」区 → 方向 A 已拍板(2026-09-20 用户)**:区改名「系统 PATH(HKLM)」,只列系统 PATH 条目(可看);**可追加一条**(开关开+管理员);**不提供修改/删除**(用户到 Windows 系统设置手动做);F3 的自定义变量表与增删改、`env:system-set/remove` 通道、core `applySystemVarSet/Remove` 全下线,新增 `applySystemPathAdd` + `env:system-path-add`;安全复查发现并修复 1 Medium(readSystemVars 降级空表可致单条覆写整个 PATH → fail-closed)。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
 | C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool><bin|binName>` 按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠;**装了 jdk 才写 JAVA_HOME(悬空根治)**。边界已全部确认(接单时):①装完自动接入;②接管同权自动接入;③JAVA_HOME 装 jdk 才写;④快照全量恢复照旧。**验收:安装/接管即自动接入(新终端直接用)、卸载/移出登记自动断开、环境页受管区随在管工具逐条展示、JAVA_HOME 不再悬空、切换版本依旧零 PATH 变动。** | ✅ 完成并推送 2026-09-22 · commit `e33a892`(见 C3 实况) |
 | F6 | 评估轮 | **评估可继续收录的工具**(《功能改进建议.md》2026-09-24 新条;输入=《常用工具列表(分星级)》《开发工具(全)》):对候选工具分档评估 —— ①国内镜像可用性(**PK 魔数/Range 206 验真**);②校验和可获得性(官方 sidecar / API 内嵌 / pinned 回填负担);③单 zip 解压即用模型适配(含 adopt);④配置/初始化成本。**产出:分档评估归档 + 建议收录优先级清单,回写 BACKLOG/F6 实况,待用户拍板后再进实现轮。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-09-24(结论见 F6 实况,待用户拍板) |
-| F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 实现完成 2026-09-24(自测通过,等走查,见 F6 实况实现段) |
+| F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 已发布 2026-09-24 · commit `cde3342` → Release **v1.6.0**(见 F6 实现段发布实况) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -244,6 +244,7 @@
 - **门禁**:`pnpm typecheck` 两段干净;`pnpm test` **192/192**(基线 188 + 4:定稿新工具判据 1 + .NET jsonApi array 专测 2 + schema 守门 1);`pnpm dist` **四段全绿**(重出 `devkit-setup-0.4.1.exe`,本例未 bump 版本 —— 是否随本轮发版待用户拍板)。
 - **行为注意(走查时看)**:①商店页四工具可见、版本列表不爆表(jmeter 16/ant 22/tomcat 24/dotnet 13);②ant/jmeter/tomcat 装后即可用(`ant -version`/`jmeter --version`/`tomcat` 启动 — 均需本机 JAVA_HOME,同 Gradle 常识);③dotnet 装后 `dotnet --version`;④四工具接管既有目录可用。
 - **状态**:实现完成 + 自测通过,按用户指示停止,等走查;验收后 push。
+- **✅ 发布实况(2026-09-24,走查通过 → push → Release)**:用户走查通过 + VPN 开。推送 5 commit(`4c03c10`→`cde3342`,经 127.0.0.1:65532 代理);bump `package.json` 0.4.1 → **0.5.0**(§10 单一来源),文档回写同一 commit `c3f5dba`(产品文档 v1.6 / 技术手册 v1.9 / README / CLAUDE.md);`pnpm dist` 四段全绿重出 **`devkit-setup-0.5.0.exe`(85,192,011 B**,SHA-256 `895713dfce0e19583284939df5bdf37deb2cfbb38457f9eda6ad4cf62025970f`);轻量 tag **`v1.6.0`**(沿双轨约定=产品文档 v1.6,`git push origin main && git push origin v1.6.0`);**Release v1.6.0(prerelease)** id 395336853 = `https://github.com/wljs9/devkit/releases/tag/v1.6.0`,附件 `devkit-setup-0.5.0.exe` 上传 state=uploaded,正文附 SHA-256 供比对。**F6 轮关闭。** 待办入口回到 BACKGROUND P2 + B 档剩余发落(.NET 镜像例外 / Eclipse 价值),pinned 发新版例行回填(F4 ③条)。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

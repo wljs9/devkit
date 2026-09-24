@@ -21,10 +21,39 @@ import { startFileServer, stubResponses } from './helpers/server';
 
 // ---- 真实仓库 catalog:加载即门禁(M1 测试不许绕过实测定稿文件) ----
 describe('catalog/ 定稿文件(§6)', () => {
-  it('九份清单(jdk/node/maven + F4 六个)全部通过 zod 校验', () => {
+  it('catalog/ 全部清单通过 zod 校验(基线三 + F4 六个 + F5 三个 + F6-impl 四个)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url)); // tests/ 上一级即仓库根
     const entries = loadCatalogDir(dir);
-    expect(entries.map((e) => e.id).sort()).toEqual(['dbeaver', 'git', 'go', 'gradle', 'idea', 'jdk', 'maven', 'node', 'pycharm', 'python', 'sqlite', 'vscode']);
+    expect(entries.map((e) => e.id).sort()).toEqual([
+      'ant', 'dbeaver', 'dotnet', 'git', 'go', 'gradle', 'idea', 'jdk', 'jmeter', 'maven', 'node', 'pycharm', 'python', 'sqlite', 'tomcat', 'vscode',
+    ]);
+  });
+  it('★ F6-impl 定稿门禁:四个新工具镜像/校验/布局判据', () => {
+    const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
+    const byId = new Map(loadCatalogDir(dir).map((e) => [e.id, e]));
+    // JMeter/Ant:apache 系 officialSidecar(镜像不同步校验,S1 跨域),binSubdir,adopt 主探测零执行(dirName)
+    for (const id of ['jmeter', 'ant'] as const) {
+      const e = byId.get(id)!;
+      expect(e.checksum.kind).toBe('officialSidecar');
+      expect(e.checksum.algo).toBe('sha512');
+      expect(e.layout).toBe('binSubdir');
+      expect(e.adopt!.version[0]!.kind).toBe('dirName');
+    }
+    // Tomcat:目录两级 → dirRegex 匹配版本目录层、fileUrl 模板静态拼 bin/(非"两级扫描")
+    const tc = byId.get('tomcat')!;
+    expect(tc.dirRegex).toContain('^v'); // 版本目录层 v11.0.26/
+    expect(tc.dirRegex).toContain('11\\.0\\.\\d+'); // 仅 tomcat-11 主版本线
+    expect(tc.sources[0]!.fileUrl).toContain('/v{ver}/bin/');
+    expect(tc.checksum.kind).toBe('officialSidecar');
+    // .NET SDK:jsonApi array + root 数组 + discoveredInline sha512 + 平铺根 binAtRoot
+    const dn = byId.get('dotnet')!;
+    expect(dn.listKind).toBe('jsonApi');
+    expect(dn.listScan?.shape).toBe('array');
+    expect(dn.listScan?.root).toBe('releases');
+    expect(dn.listScan?.assetNamePath).toBe('url');
+    expect(dn.checksum).toMatchObject({ kind: 'discoveredInline', algo: 'sha512' });
+    expect(dn.layout).toBe('binAtRoot');
+    expect(dn.rootDir).toBe('');
   });
   it('S1 定稿门禁:Node 校验源首位必须是官方 nodejs.org(与默认下载源跨域,镜像 sidecar 只兜底)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
@@ -438,6 +467,73 @@ describe('F5 jsonApi array(Go dl API 形态)', () => {
     expect(vs[0]!.asset).toBe('go1.27.1.windows-amd64.zip');
     expect(vs[0]!.checksum).toEqual({ algo: 'sha256', hex: 'b'.repeat(64) }); // 内嵌哈希随发现携带
     expect(vs[0]!.size).toBe(78931360);
+  });
+});
+
+/** ★ F6-impl(2026-09-24):jsonApi array 增强 —— .NET SDK releases.json 形态 */
+describe('F6-impl jsonApi array(.NET SDK releases.json 形态)', () => {
+  function dotnetCatalog() {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'dotnet', displayName: '.NET SDK', listKind: 'jsonApi',
+      listApi: 'https://dot.invalid/release-metadata/10.0/releases.json',
+      listScan: {
+        shape: 'array', root: 'releases', versionPath: 'sdk.version', assetPath: 'sdk.files',
+        checksumPath: 'hash', assetNamePath: 'url', pick: { rid: 'win-x64' },
+      },
+      fileRegex: '^dotnet-sdk-(?<ver>[\\d.]+)-win-x64\\.zip$',
+      maxVersions: 20, versionPolicy: { excludeRc: true },
+      sources: [{ id: 'official', fileUrl: 'https://builds.dot.invalid/Sdk/{ver}/dotnet-sdk-{ver}-win-x64.zip' }],
+      checksum: { kind: 'discoveredInline', algo: 'sha512' },
+      rootDir: '', layout: 'binAtRoot',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+  const zipOf = (ver: string, hash: string) => ({
+    name: 'dotnet-sdk-win-x64.zip', rid: 'win-x64', url: `https://builds.dot.invalid/Sdk/${ver}/dotnet-sdk-${ver}-win-x64.zip`, hash,
+  });
+  const releases = (items: unknown[]) => JSON.stringify({ releases: items });
+
+  it('root 取对象内嵌数组;asset 取 url 末段;sha512(128hex);pick+fileRegex 跳过同 rid 的 exe', async () => {
+    const body = releases([
+      { sdk: { version: '10.0.400', files: [zipOf('10.0.400', '0' .repeat(128))] } },
+      { sdk: { version: '10.0.401', files: [ // exe 在前 → fileRegex 过滤掉,取 zip
+        { name: 'dotnet-sdk-win-x64.exe', rid: 'win-x64', url: 'https://builds.dot.invalid/Sdk/10.0.401/dotnet-sdk-10.0.401-win-x64.exe', hash: 'e'.repeat(128) },
+        zipOf('10.0.401', '1'.repeat(128)),
+      ] } },
+      { sdk: { version: '10.1.0-preview.1', files: [zipOf('10.1.0-preview.1', '2'.repeat(128))] } }, // rc/preview → excludeRc 滤
+      { sdk: { version: '10.0.302', files: [] } }, // 无资产 → 跳过
+    ]);
+    const { fn } = await stubResponses({ 'https://dot.invalid/release-metadata/10.0/releases.json': body });
+    const vs = await listVersions(dotnetCatalog(), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['10.0.401', '10.0.400']);
+    expect(vs[0]!.asset).toBe('dotnet-sdk-10.0.401-win-x64.zip');
+    expect(vs[0]!.checksum).toEqual({ algo: 'sha512', hex: '1'.repeat(128) });
+    // discoveredInline 校验走 c.algo=sha512 + 内嵌 hex(install.ts resolveExpectedChecksum 路径)
+  });
+
+  it('Go 形态兼容回归:平数组(无 root)+ filename 字段 + sha256(64hex)+ pick 不误伤', async () => {
+    const body = JSON.stringify([
+      { version: 'go1.27.1', files: [{ filename: 'go1.27.1.windows-amd64.zip', os: 'windows', arch: 'amd64', kind: 'archive', sha256: 'b'.repeat(64), size: 789 }] },
+    ]);
+    const r = CatalogEntrySchema.safeParse({
+      id: 'go2', displayName: 'Go2', listKind: 'jsonApi', listApi: 'https://go2.invalid/dl',
+      listScan: { shape: 'array', versionPath: 'version', assetPath: 'files', checksumPath: 'sha256', sizePath: 'size', pick: { os: 'windows' } },
+      fileRegex: '^go(?<ver>[\\d.]+)\\.windows-amd64\\.zip$',
+      sources: [{ id: 'official', fileUrl: 'https://go2.invalid/dl/{asset}' }],
+      checksum: { kind: 'discoveredInline', algo: 'sha256' }, rootDir: 'go', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const { fn } = await stubResponses({ 'https://go2.invalid/dl': body });
+    const vs = await listVersions(r.data, { fetchImpl: fn });
+    expect(vs[0]!.asset).toBe('go1.27.1.windows-amd64.zip');
+    expect(vs[0]!.checksum).toEqual({ algo: 'sha256', hex: 'b'.repeat(64) });
+  });
+
+  it('schema 守门:array 缺 pick 不拒(可选);root 合法', () => {
+    const e = nodeCatalog();
+    expect(CatalogEntrySchema.safeParse({ ...e, listScan: { shape: 'array', root: 'releases', assetNamePath: 'url' } }).success).toBe(true);
+    expect(CatalogEntrySchema.safeParse({ ...e, listScan: { shape: 'array', assetNamePath: 'url' } }).success).toBe(true);
   });
 });
 

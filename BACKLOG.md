@@ -68,7 +68,7 @@
 | C2 | 改进 | **环境页「系统环境变量(HKLM)」区 → 方向 A 已拍板(2026-09-20 用户)**:区改名「系统 PATH(HKLM)」,只列系统 PATH 条目(可看);**可追加一条**(开关开+管理员);**不提供修改/删除**(用户到 Windows 系统设置手动做);F3 的自定义变量表与增删改、`env:system-set/remove` 通道、core `applySystemVarSet/Remove` 全下线,新增 `applySystemPathAdd` + `env:system-path-add`;安全复查发现并修复 1 Medium(readSystemVars 降级空表可致单条覆写整个 PATH → fail-closed)。 | ✅ 已发布 2026-09-20 · commit `3509542` → v1.4.0(见 C 轮实况) |
 | C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool><bin|binName>` 按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠;**装了 jdk 才写 JAVA_HOME(悬空根治)**。边界已全部确认(接单时):①装完自动接入;②接管同权自动接入;③JAVA_HOME 装 jdk 才写;④快照全量恢复照旧。**验收:安装/接管即自动接入(新终端直接用)、卸载/移出登记自动断开、环境页受管区随在管工具逐条展示、JAVA_HOME 不再悬空、切换版本依旧零 PATH 变动。** | ✅ 完成并推送 2026-09-22 · commit `e33a892`(见 C3 实况) |
 | F6 | 评估轮 | **评估可继续收录的工具**(《功能改进建议.md》2026-09-24 新条;输入=《常用工具列表(分星级)》《开发工具(全)》):对候选工具分档评估 —— ①国内镜像可用性(**PK 魔数/Range 206 验真**);②校验和可获得性(官方 sidecar / API 内嵌 / pinned 回填负担);③单 zip 解压即用模型适配(含 adopt);④配置/初始化成本。**产出:分档评估归档 + 建议收录优先级清单,回写 BACKLOG/F6 实况,待用户拍板后再进实现轮。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-09-24(结论见 F6 实况,待用户拍板) |
-| F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant**(零 core 改动,Apache 系 catalog 两份,镜像=华为云+USTC,校验=官方 archive 跨域 .sha512,同 Maven 范式)+ **Tomcat**(需 catalog.ts 加**两级目录父前缀扫描** `tomcat-11/{ver}/bin/`,F5 归档核心小改)+ **.NET SDK**(官方单源,校验=官方 `releases.json` 内嵌 SHA-512,discoveredInline 同范式)。**验收:四个工具商店可见/版本列表/安装校验(下载 e2e by cat + 单测)/布局/adopt 探测齐 + 门禁 188 只增不减;pinned 类 0;完成自测即停等验收(不 push,不动 dist 则不做)。** | 🚧 实现中 2026-09-24(见 F6 实况实现段) |
+| F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 实现完成 2026-09-24(自测通过,等走查,见 F6 实况实现段) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -229,6 +229,21 @@
 - **★4/★5 档一句话判(范围=《分星级》其余档)**:★★☆☆ 包管理器/压缩包档(Maven/Gradle/Go/SQLite/CMake/Nginx/Tomcat/Rust)、★★★★ Kafka/RabbitMQ/ES/Minikube·Kind/K8s/Jenkins/Nexus/SonarQube、★★★★★ Hadoop 系/CUDA/AI 框架/Android SDK/源码编译 —— 前档 5 收 4 归档(F5,不复述);后两档全部 JVM 集群/GPU/驱动/源码编译型,**模型外不收**,与 ★3 同属 v1.2+ 路线(产品文档 §11)。
 - **建议优先级(供拍板)**:① **JMeter + Ant**(零核心改动,Apache 系同范式,风险最低,先上);② **Tomcat**(需给 catalog.ts 加"两级目录父前缀"小改 —— 动解析核,涉及 core 最敏感区,做之前按流程改前 commit + 补测试);③ .NET SDK(官方单源内嵌 sha512,classic discoveredInline 复用,但镜像优先弱,用户定夺);④ Eclipse/其余暂缓。
 - 状态:**评估完成(★3 全量实测 + 其余档归档),待用户拍板收录哪些**;确认后按标准接单流程(复述范围 → 登记 → 改前 commit → 实现+补测试 → 门禁 → dist → 走查 → push)。
+
+### F6 实况 · 实现段(2026-09-24:用户拍板"四个都做",自测通过已停)
+
+- **实现(较评估预估更省)**:
+  - **Tomcat 无需两级扫描**(F5 归档前提作废):dirIndex 把 `v11.0.26/` 当"版本目录",fileUrl 模板静态拼 `…/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip` —— 与 Maven 的 `{ver}/binaries/` 同构,Tomcat 从"动解析核"降为"零核心改动"。
+  - **catalog.ts 唯一改动 = jsonApi array 增强(F6-impl,向后兼容)**:`root` 取对象内嵌版本数组(.NET releases.json 的 `releases`);`assetNamePath` 缺省 filename、.NET 取 `url` 末段(dotnet-sdk-10.0.401-win-x64.zip);pick 命中后再用 **fileRegex 过滤** —— .NET 同 rid 下 .exe 与 .zip 并存(pick 只筛平台、fileRegex 挑 zip);内置哈希按**长度分派**:64hex=sha256(Go)、**128hex=sha512**(.NET)。Go/F5 测试原样通过。
+  - **四份 catalog**:`jmeter.json`/`ant.json`/`tomcat.json` = officialSidecar sha512(官方 archive 跨域,同 Maven,S1 不破);`dotnet.json` = jsonApi array + discoveredInline sha512(官方 releases.json 内嵌,同 Go discoveredInline 范式,algo 走 catalog 声明)。
+- **真机验证(2026-09-24 实测)**:
+  - 版本发现全过:jmeter 16 版(华为云镜像同步面)/ ant 22 版 / tomcat 24 版(tomcat-11 线)/ dotnet 13 版(10.0 线,内嵌 sha512 携带,`asset=dotnet-sdk-10.0.401-win-x64.zip` 与官方 URL 模板一致)。
+  - 文件与校验真身:四 zip 全部 `PK\x03\x04` 魔数(华为云 jmeter/ant/tomcat + 官方 dotnet);官方 archive `.sha512` 侧车 206(ant 1.10.18 / tomcat 11.0.26 / jmeter 5.6.3)。
+  - **真机安装闭环:ant@1.10.18 / jmeter@5.6.3 / tomcat@11.0.26** 三工具完整 install() 下载→sha512 校验→解压→登记→建 junction 全绿。**dotnet(200MB)未真装**,由走查覆盖(发现/URL/校验链路已确认)。
+  - 复用 e2e:`scripts/f6-e2e.mts`(esbuild → `scripts/.f6-e2e.cjs`,--discover / --url <tool> <ver> 抽查);打包产物已入 .gitignore,同 f4-e2e 约定。
+- **门禁**:`pnpm typecheck` 两段干净;`pnpm test` **192/192**(基线 188 + 4:定稿新工具判据 1 + .NET jsonApi array 专测 2 + schema 守门 1);`pnpm dist` **四段全绿**(重出 `devkit-setup-0.4.1.exe`,本例未 bump 版本 —— 是否随本轮发版待用户拍板)。
+- **行为注意(走查时看)**:①商店页四工具可见、版本列表不爆表(jmeter 16/ant 22/tomcat 24/dotnet 13);②ant/jmeter/tomcat 装后即可用(`ant -version`/`jmeter --version`/`tomcat` 启动 — 均需本机 JAVA_HOME,同 Gradle 常识);③dotnet 装后 `dotnet --version`;④四工具接管既有目录可用。
+- **状态**:实现完成 + 自测通过,按用户指示停止,等走查;验收后 push。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

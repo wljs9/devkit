@@ -100,6 +100,8 @@ const ListScanSchema = z
     pick: z.record(z.string()).optional(),
     /** ★ F5:版本串规整正则(首捕获组=版本;Go 的 "go1.27.1" → "1.27.1")。仅 array 形状消费 */
     versionRegex: z.string().optional(),
+    /** ★ F6-impl array 型(.NET):资产名取哪个字段,缺省 filename;.NET 用 url(完整地址,取末段文件名) */
+    assetNamePath: z.string().optional(),
   })
   .strict();
 
@@ -379,16 +381,28 @@ function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
       out.push({ tool: entry.id, version, dir: version, asset: '', preferredSourceId: entry.sources[0]!.id });
     }
   } else if (scan.shape === 'array') {
-    const arr = Array.isArray(json) ? json : [];
+    /** ★ F6-impl:.NET releases.json 是对象内嵌数组 → root 点路径取数组;缺省(Go)=响应本身即平数组 */
+    const arr = scan.root ? (Array.isArray(dotGet(json, scan.root)) ? (dotGet(json, scan.root) as unknown[]) : []) : Array.isArray(json) ? json : [];
+    /** ★ F6-impl:.NET 资产名取 url 字段的末段文件名(url 含完整路径);Go 取 filename(本身即文件名) */
+    const assetOf = (f: unknown): string => {
+      const raw = String(dotGet(f, scan.assetNamePath ?? 'filename') ?? '');
+      return raw.includes('/') ? raw.slice(raw.lastIndexOf('/') + 1) : raw;
+    };
     for (const item of arr) {
       const verRaw = String(dotGet(item, scan.versionPath ?? '') ?? '');
       // versionRegex(首捕获组)优先:Go 的 "go1.27.1" → "1.27.1";否则沿用 normalVersion
       const pre = scan.versionRegex ? (new RegExp(scan.versionRegex).exec(verRaw)?.[1] ?? '') : verRaw;
       const version = normalVersion(pre, entry.rawVersion ?? true);
       if (!version) continue;
-      // 版本内选目标资产:pick 键全命中的首个文件(Go:os=windows & arch=amd64 & kind=archive)
+      // 版本内选目标资产:pick 键全命中(Go:os=windows & arch=amd64 & kind=archive);.NET 后再用 fileRegex
+      // 过滤 —— 同一 rid 下 exe 与 zip 并存(rid=win-x64 有 .exe 与 .zip),pick 只筛平台、fileRegex 挑 zip。
       const files = Array.isArray(dotGet(item, scan.assetPath ?? '')) ? (dotGet(item, scan.assetPath ?? '') as unknown[]) : [];
-      const hit = files.find((f) => Object.entries(scan.pick ?? {}).every(([k, want]) => dotGet(f, k) === want));
+      const hit = files.find((f) => {
+        const pickOk = Object.entries(scan.pick ?? {}).every(([k, want]) => dotGet(f, k) === want);
+        if (!pickOk) return false;
+        if (entry.fileRegex && !new RegExp(entry.fileRegex).test(assetOf(f))) return false;
+        return true;
+      });
       if (!hit) continue; // 无目标平台资产的版本(rc/beta 或纯源码)跳过
       const sizeRaw = Number(dotGet(hit, scan.sizePath ?? ''));
       const checksumRaw = String(dotGet(hit, scan.checksumPath ?? '') ?? '');
@@ -396,9 +410,13 @@ function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
         tool: entry.id,
         version,
         dir: version,
-        asset: String(dotGet(hit, 'filename') ?? ''),
+        asset: assetOf(hit),
         size: Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : undefined,
-        checksum: /^[0-9a-f]{64,128}$/i.test(checksumRaw) ? { algo: 'sha256', hex: checksumRaw.toLowerCase() } : undefined,
+        // ★ F6-impl:哈希长度分派 —— .NET releases.json 是 SHA-512(128 hex),Go 是 sha256(64 hex)
+        checksum:
+          /^[0-9a-f]{128}$/i.test(checksumRaw) ? { algo: 'sha512', hex: checksumRaw.toLowerCase() }
+          : /^[0-9a-f]{64}$/i.test(checksumRaw) ? { algo: 'sha256', hex: checksumRaw.toLowerCase() }
+          : undefined,
         preferredSourceId: entry.sources[0]!.id,
       });
     }

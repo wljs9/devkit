@@ -1,0 +1,55 @@
+{
+  "id": "tomcat",
+  "displayName": "Apache Tomcat",
+  "listKind": "dirIndex",
+  "dirRegex": "^v(?<ver>11\\.0\\.\\d+)/$",
+  "fileRegex": "^apache-tomcat-(?<ver>11\\.0\\.\\d+)-windows-x64\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/apache/tomcat/tomcat-11/",
+      "fileUrl": "https://mirrors.huaweicloud.com/apache/tomcat/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip",
+      "note": "F6-impl 实测 2026-09-24:华为云 tomcat-11/v11.0.26/bin/ 真(win-x64.zip PK 魔数通过);镜像 bin/ 无 .sha512 → 校验走官方 archive;仅收 tomcat-11 主版本线"
+    },
+    {
+      "id": "tuna",
+      "listUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/tomcat/tomcat-11/",
+      "fileUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/tomcat/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip",
+      "note": "F6-impl 实测:清华 apache/tomcat 镜像 v11.0.26 bin/ 真,作华为云兜底"
+    },
+    {
+      "id": "ustc",
+      "listUrl": "https://mirrors.ustc.edu.cn/apache/tomcat/tomcat-11/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/apache/tomcat/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip",
+      "note": "F6-impl 实测:USTC apache 镜像有 tomcat,作第三兜底"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha512",
+    "urls": [
+      "https://archive.apache.org/dist/tomcat/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip.sha512",
+      "https://dlcdn.apache.org/tomcat/tomcat-11/v{ver}/bin/apache-tomcat-{ver}-windows-x64.zip.sha512"
+    ],
+    "note": "★ F6-impl 2026-09-24:Tomcat 官方 .sha512 侧车实测 200(archive v11.0.26,167B);镜像不同步校验,走官方跨域(S1)。版本只收 tomcat-11(当前主版本线),老线 10.x 需另开 catalog"
+  },
+  "rootDir": "apache-tomcat-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\catalina.bat"],
+    "exec": "bin\\catalina.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "dirName", "regex": "^apache-tomcat-(\\d+\\.\\d+\\.\\d+)", "note": "zip 顶层目录 apache-tomcat-<ver>,零执行风险" },
+      { "kind": "exec", "exe": "bin\\catalina.bat", "args": ["version"], "regex": "Apache Tomcat/(\\d+\\.\\d+\\.\\d+)", "note": "catalina.bat version 输出 'Server version: Apache Tomcat/11.0.26'(需 JAVA_HOME,属工具常识)" }
+    ],
+    "note": "★ F6-impl 接管既有 Tomcat(zip 解压目录)。运行/启动需 JAVA_HOME,属工具常识"
+  },
+  "assetNamingNote": "Tomcat 目录为 apache/tomcat/tomcat-11/v11.0.x/bin/ 两级子目录,dirIndex 扫 v11.0.x 版本目录层,fileUrl 模板静态拼 bin/ 层(F5 归档'需两级扫描'判过:实为 Maven 同构的'版本目录+模板子层')",
+  "m0": {
+    "verifiedAt": "2026-09-24",
+    "sample": "11.0.26",
+    "evidence": "F6-impl 探测:华为云/清华/USTC tomcat-11 镜像真 + 文件 PK;官方 archive .sha512 200(167B)"
+  }
+}

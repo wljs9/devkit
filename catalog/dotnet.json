@@ -1,0 +1,47 @@
+{
+  "id": "dotnet",
+  "displayName": ".NET SDK",
+  "listKind": "jsonApi",
+  "listApi": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json",
+  "listScan": {
+    "shape": "array",
+    "root": "releases",
+    "versionPath": "sdk.version",
+    "assetPath": "sdk.files",
+    "checksumPath": "hash",
+    "assetNamePath": "url",
+    "pick": { "rid": "win-x64" }
+  },
+  "fileRegex": "^dotnet-sdk-(?<ver>[\\d.]+)-win-x64\\.zip$",
+  "maxVersions": 20,
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "official",
+      "fileUrl": "https://builds.dotnet.microsoft.com/dotnet/Sdk/{ver}/dotnet-sdk-{ver}-win-x64.zip",
+      "note": "F6-impl 实测 2026-09-24:官方 builds.dotnet.microsoft.com 直连可达(zip Range 206,PK 魔数验证);【无国内镜像】(阿里/华为/清华 dotnet 均无) —— 镜像优先支柱弱,官方单源可接受(评估记录)。url 模板与官方 downloads 一致"
+    }
+  ],
+  "checksum": {
+    "kind": "discoveredInline",
+    "algo": "sha512",
+    "note": "★ F6-impl:.NET 官方 release-metadata/{channel}/releases.json 每版本 sdk.files 内嵌 SHA-512(128 hex,实测 10.0.401 win-x64.zip 为 24b670ad…),与 Go 的 discoveredInline 同范式 —— 权威、零额外请求;algo=sha512 由 catalog 声明、install.ts 按 c.algo 用"
+  },
+  "rootDir": "",
+  "layout": "binAtRoot",
+  "adopt": {
+    "markers": ["dotnet.exe"],
+    "exec": "dotnet.exe",
+    "binDir": "",
+    "version": [
+      { "kind": "exec", "exe": "dotnet.exe", "args": ["--version"], "regex": "(\\d+\\.\\d+\\.\\d+(?:-[^\\s]+)?)", "note": "dotnet --version 直接输出 SDK 版本(如 10.0.401),权威零解析风险" },
+      { "kind": "fileGlob", "dir": "sdk", "pattern": "^(\\d+\\.\\d+\\.\\d+)$", "note": "sdk/<ver>/ 版本目录(含 .toolsetversion 等),列目录取首个,免执行" }
+    ],
+    "note": "★ F6-impl 接管既有 .NET SDK(官方 zip 解压目录 / 手动安装目录)。dotnet.exe 在根、binAtRoot,receive PATH = current\\dotnet"
+  },
+  "assetNamingNote": ".NET SDK zip 平铺根(dotnet.exe 直接顶层,实测 local entries:dnx.cmd/dotnet.exe/LICENSE.txt…);资产名取 sdk.files[].url 末段即 dotnet-sdk-<ver>-win-x64.zip;hash 为 128hex 的 SHA-512",
+  "m0": {
+    "verifiedAt": "2026-09-24",
+    "evidence": "F6-impl 探测:releases.json 22 release(10.0.100~10.0.401,SDK 版本全部唯一);win-x64.zip Range 206 + PK 魔数;win-x64 有 .exe 与 .zip 同 rid → 用 fileRegex 过滤选 zip"
+  }
+}

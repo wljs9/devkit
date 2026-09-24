@@ -1,0 +1,49 @@
+{
+  "id": "jmeter",
+  "displayName": "Apache JMeter",
+  "listKind": "dirIndex",
+  "dirRegex": "^apache-jmeter-(?<ver>\\d+\\.\\d+(?:\\.\\d+)?)\\.zip$",
+  "fileRegex": "^apache-jmeter-(?<ver>\\d+\\.\\d+(?:\\.\\d+)?)\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/apache/jmeter/binaries/",
+      "fileUrl": "https://mirrors.huaweicloud.com/apache/jmeter/binaries/apache-jmeter-{ver}.zip",
+      "note": "F6-impl 实测 2026-09-24:华为云 apache/jmeter/binaries/ 目录真(apache-jmeter-4.0/5.0 等多版本 zip,tgz 源码包同列),文件 PK 魔数验证;镜像【不同步】.sha512 → 校验走官方 archive 跨域"
+    },
+    {
+      "id": "ustc",
+      "listUrl": "https://mirrors.ustc.edu.cn/apache/jmeter/binaries/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/apache/jmeter/binaries/apache-jmeter-{ver}.zip",
+      "note": "F6-impl 实测:USTC apache 镜像真(apache-jmeter-5.6.3.zip 在列),作为华为云兜底"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha512",
+    "urls": [
+      "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-{ver}.zip.sha512",
+      "https://downloads.apache.org/jmeter/binaries/apache-jmeter-{ver}.zip.sha512"
+    ],
+    "note": "★ F6-impl 2026-09-24:JMeter 同 Maven 范式 —— 镜像(华为/USTC)不同步校验文件,官方 archive 侧车 .sha512 实测 200(5.6.3,154B)。下载走镜像、校验走官方 → 天然跨域背书(S1)"
+  },
+  "rootDir": "apache-jmeter-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\jmeter.bat"],
+    "exec": "bin\\jmeter.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "dirName", "regex": "^apache-jmeter-(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "zip 顶层目录 apache-jmeter-<ver>(解压目录即版本,零执行风险)" },
+      { "kind": "exec", "exe": "bin\\jmeter.bat", "args": ["--version"], "regex": "Apache JMeter \\((\\d+\\.\\d+(?:\\.\\d+)?)\\)", "note": "jmeter.bat --version 输出含版本(需 JAVA_HOME,属工具常识,同 Gradle)" }
+    ],
+    "note": "★ F6-impl 接管既有 JMeter(zip 解压目录)。运行需 JAVA_HOME 属工具常识(同 gradle),markers 判目录身份不依赖它"
+  },
+  "assetNamingNote": "jmeter 目录为平铺文件(apache-jmeter-X.Y.Z.zip 直列),非按版本子目录;dirRegex 即文件名",
+  "m0": {
+    "verifiedAt": "2026-09-24",
+    "sample": "5.6.3",
+    "evidence": "F6-impl 探测:华为云/USTC 目录真 + 文件 PK;官方 archive .zip.sha512 200(154B)"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "ant",
+  "displayName": "Apache Ant",
+  "listKind": "dirIndex",
+  "dirRegex": "^apache-ant-(?<ver>\\d+\\.\\d+\\.\\d+)-bin\\.zip$",
+  "fileRegex": "^apache-ant-(?<ver>\\d+\\.\\d+\\.\\d+)-bin\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/apache/ant/binaries/",
+      "fileUrl": "https://mirrors.huaweicloud.com/apache/ant/binaries/apache-ant-{ver}-bin.zip",
+      "note": "F6-impl 实测 2026-09-24:华为云 apache/ant/binaries/ 目录真(apache-ant-1.9.16/1.10.14 -bin.zip 在列,PK 魔数通过);镜像【不同步】.sha512 → 校验走官方 archive"
+    },
+    {
+      "id": "ustc",
+      "listUrl": "https://mirrors.ustc.edu.cn/apache/ant/binaries/",
+      "fileUrl": "https://mirrors.ustc.edu.cn/apache/ant/binaries/apache-ant-{ver}-bin.zip",
+      "note": "F6-impl 探测:USTC apache 镜像(ant 目录应同 maven/jmeter 结构),作华为云兜底"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha512",
+    "urls": [
+      "https://archive.apache.org/dist/ant/binaries/apache-ant-{ver}-bin.zip.sha512",
+      "https://downloads.apache.org/ant/binaries/apache-ant-{ver}-bin.zip.sha512"
+    ],
+    "note": "★ F6-impl 2026-09-24:Ant 同 Maven 范式 —— 官方 archive .zip.sha512 实测 200(1.10.14,129B);镜像不同步校验,走官方跨域(S1)"
+  },
+  "rootDir": "apache-ant-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\ant.bat"],
+    "exec": "bin\\ant.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "dirName", "regex": "^apache-ant-(\\d+\\.\\d+\\.\\d+)", "note": "zip 顶层目录 apache-ant-<ver>,零执行风险" },
+      { "kind": "exec", "exe": "bin\\ant.bat", "args": ["-version"], "regex": "Apache Ant\\(TM\\) version (\\d+\\.\\d+\\.\\d+)", "note": "ant.bat -version 输出 'Apache Ant(TM) version 1.10.14'(需 JAVA_HOME,属工具常识)" }
+    ],
+    "note": "★ F6-impl 接管既有 Ant(zip 解压目录)。运行需 JAVA_HOME,同 Gradle/Maven/JMeter 常识"
+  },
+  "assetNamingNote": "ant 目录为平铺文件(apache-ant-X.Y.Z-bin.zip),带 -bin 段区分 src 包",
+  "m0": {
+    "verifiedAt": "2026-09-24",
+    "sample": "1.10.14",
+    "evidence": "F6-impl 探测:华为云目录真 + 文件 PK;官方 archive .zip.sha512 200(129B)"
+  }
+}

@@ -8,8 +8,8 @@
 > **F7 评估轮已完成(2026-10-17:★4 档 9 个 + 《开发工具(全)》未评估 12 项全量实测 → **无一进入可收录档**,
 > 详见文末「F7 实况」;不动 catalog/门禁,商店仍 16 工具 / 192 例)。**
 > **当前活待办 = P2 用户清单(空)+ B 档剩余发落(.NET 镜像例外接受与否 / Eclipse 收录价值)+ pinned 发新版例行回填(F4 ③条)**;
-> **F8 评估 + 实现已完成(2026-10-17:语言运行时/SDK 类评估 → 用户拍板收 Groovy + Flutter → 实现 + 门禁 196/196
-> + Groovy 真机安装闭环 → **等走查**(见文末「F8 实况」;商店现 18 工具)。**
+> **F8 评估 + 实现已完成并发布(2026-10-17:语言运行时/SDK 类评估 → 用户拍板收 Groovy + Flutter → 门禁 196/196
+> + Groovy 真机安装闭环 → 走查通过 → push → **Release v1.7.0**;商店现 **18 工具**;见文末「F8 实况」)。**
 > F7 结论待用户拍板是否扩范围;**实现成本分档已登记**(2026-10-17,见「F7 · 实现成本分档」节:
 > 零 core 改动即可加入者仅 **Elasticsearch / Eclipse** 两个,其余需共通改动或单项特化;是否进实现轮待拍板)。
 > 新会话先读 `CLAUDE.md` 启动指引,再回本表。
@@ -77,7 +77,7 @@
 | F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 已发布 2026-09-24 · commit `cde3342` → Release **v1.6.0**(见 F6 实现段发布实况) |
 | F7 | 评估轮 | **评估 ★4 档工具可否收录**(《功能改进建议.md》2026-10-17 单条"评估一些 4 星的工具是否可收录,与《开发工具(全)》参考"):候选池 = 《常用工具列表(分星级)》★4 档 9 个 + 《开发工具(全)》同难度未评估 12 项;判据沿用 F5/F6(镜像 PK 魔数/Range 206 验真 + 校验侧车 + 单 zip 解压即用 + 初始化成本);F6 已归档的镜像缺项不复测。**产出:分档实测结论 + 建议优先级(见 F7 实况)。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-10-17(结论:★4 全档无一可收,见 F7 实况;待用户拍板) |
 | F8 | 评估轮 | **评估「语言运行时 / SDK 类」工具可否收录**(2026-10-17 用户口径:"先考虑类似 jdk、python 这种的工具",Eclipse 这类官网单源/IDE 先搁置):候选池 = 《开发工具(全)》§1 语言运行时/SDK 全档 + JDK 同族发行版 + C/C++ 工具链(约 40 项);判据沿用 F5–F7。 | ✅ 评估完成 2026-10-17(结论:仅 Groovy 零改动可收、Flutter 需一处小增强;见 F8 实况) |
-| F8-impl | 功能 | **收录 Groovy + Flutter**(用户 2026-10-17 拍板"都收"):Groovy = Apache 同范式**零核心改动**;Flutter = 一份 catalog + **catalog.ts jsonApi 一处向后兼容增强**(map 形支持 `pick` 字段过滤 + `checksumPath` 内嵌哈希/URL 分派)。 | ✅ 实现完成 + 自测通过(门禁 196/196、dist 四段绿、Groovy 真机闭环)2026-10-17,**等走查** |
+| F8-impl | 功能 | **收录 Groovy + Flutter**(用户 2026-10-17 拍板"都收"):Groovy = Apache 同范式**零核心改动**;Flutter = 一份 catalog + **catalog.ts jsonApi 一处向后兼容增强**(map 形支持 `pick` 字段过滤 + `checksumPath` 内嵌哈希/URL 分派)。 | ✅ 已发布 2026-10-17 · commit `8d72431` → Release **v1.7.0**(见 F8 实现段发布实况) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -381,6 +381,10 @@
 - **⚠ 运行 e2e 的方式变了(新会话勿踩)**:本机**没有 esbuild**(`pnpm exec esbuild` 报 not found,devDependencies 里也没有),f4/f6-e2e 文档里的 esbuild 打包路径已不可用;改用仓库已有的 **jiti**:`node_modules/.bin/jiti scripts/f8-e2e.mts --discover|--install <tool>`。已写进脚本头注释。
 - **待用户走查(人工项)**:①商店页两个新工具可见、版本列表不爆表(Groovy 48 / Flutter 20);②真装一次 Groovy → 新开终端 `groovy -v`(需 JAVA_HOME 属工具常识);③真装一次 Flutter → `flutter --version`(需 Git、~1GB);④接管既有 Groovy/Flutter 目录 → 版本识别。
 - **状态**:**实现完成 + 自测通过(含真机),停在此等走查**;走查通过后 push(是否发版待拍板)。
+- **✅ 发布实况(2026-10-17,用户指示"推送 + 包括 release")**:bump `package.json` 0.5.0 → **0.6.0**(§10 单一来源),文档回写同一 commit `b7dd576`(产品文档 v1.6 → **v1.7** / 技术手册 v1.9 → **v2.0** / README 收录工具 16 → 18 与校验口径 / CLAUDE.md 阶段口径);`pnpm dist` 四段全绿重出 **`devkit-setup-0.6.0.exe`(85,196,359 B**,SHA-256 `D0478F214BC03F8AF47C488140C22E625BDF59A9509455456B1129219AFC5DE1`);轻量 tag **`v1.7.0`**(双轨约定 = 产品文档版本);`git push origin main && git push origin --tags`(远端 main = `b7dd576`);**Release v1.7.0(prerelease)** id **415667089** = `https://github.com/wljs9/devkit/releases/tag/v1.7.0`,附件 `devkit-setup-0.6.0.exe` 上传 state=uploaded,正文附 SHA-256 供比对;**匿名复核:API 附件 size 85,196,359 B / 正文含哈希 / 下载实测 HTTP 206**。**F8 轮关闭。**
+- **⚠ 本机 GitHub 凭据(2026-10-17 实测,新会话必读)**:仓库的 `credential.https://github.com.helper` **指向 GitHub CLI**(`gh auth git-credential`),而 **gh 未登录**、`manager` 里先前也无条目 → 直接 `git push` 会报 *could not read Username*。本轮由用户在 Windows 凭据管理器**新增普通凭据**(`git:https://github.com`,user=wljs9)后,用命令行临时覆盖 helper 才走通:
+  `git -c credential.https://github.com.helper= -c credential.https://github.com.helper=manager push origin main`
+  (空值先重置 URL 级 helper 列表,再挂 `manager`;**不要改全局配置**,用 `-c` 临时覆盖即可)。取令牌一律 `printf "protocol=https\nhost=github.com\n\n" | git -c … credential fill` 现取现用、只进 shell 变量、整行遮蔽回显。另一条正路 = 让用户跑 `gh auth login`(仓库 helper 已指向 gh),之后 `gh release create` 可直接用。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

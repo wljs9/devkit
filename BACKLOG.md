@@ -74,6 +74,8 @@
 | F6 | 评估轮 | **评估可继续收录的工具**(《功能改进建议.md》2026-09-24 新条;输入=《常用工具列表(分星级)》《开发工具(全)》):对候选工具分档评估 —— ①国内镜像可用性(**PK 魔数/Range 206 验真**);②校验和可获得性(官方 sidecar / API 内嵌 / pinned 回填负担);③单 zip 解压即用模型适配(含 adopt);④配置/初始化成本。**产出:分档评估归档 + 建议收录优先级清单,回写 BACKLOG/F6 实况,待用户拍板后再进实现轮。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-09-24(结论见 F6 实况,待用户拍板) |
 | F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 已发布 2026-09-24 · commit `cde3342` → Release **v1.6.0**(见 F6 实现段发布实况) |
 | F7 | 评估轮 | **评估 ★4 档工具可否收录**(《功能改进建议.md》2026-10-17 单条"评估一些 4 星的工具是否可收录,与《开发工具(全)》参考"):候选池 = 《常用工具列表(分星级)》★4 档 9 个 + 《开发工具(全)》同难度未评估 12 项;判据沿用 F5/F6(镜像 PK 魔数/Range 206 验真 + 校验侧车 + 单 zip 解压即用 + 初始化成本);F6 已归档的镜像缺项不复测。**产出:分档实测结论 + 建议优先级(见 F7 实况)。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-10-17(结论:★4 全档无一可收,见 F7 实况;待用户拍板) |
+| F8 | 评估轮 | **评估「语言运行时 / SDK 类」工具可否收录**(2026-10-17 用户口径:"先考虑类似 jdk、python 这种的工具",Eclipse 这类官网单源/IDE 先搁置):候选池 = 《开发工具(全)》§1 语言运行时/SDK 全档 + JDK 同族发行版 + C/C++ 工具链(约 40 项);判据沿用 F5–F7。 | ✅ 评估完成 2026-10-17(结论:仅 Groovy 零改动可收、Flutter 需一处小增强;见 F8 实况) |
+| F8-impl | 功能 | **收录 Groovy + Flutter**(用户 2026-10-17 拍板"都收"):Groovy = Apache 同范式**零核心改动**;Flutter = 一份 catalog + **catalog.ts jsonApi 一处向后兼容增强**(map 形支持 `pick` 字段过滤 + `checksumPath` 内嵌哈希/URL 分派)。 | ⏳ 实现中(见 F8 实况实现段) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -340,6 +342,27 @@
 | draw.io | 便携 zip 有但**仅 GitHub + 无 `.sha256`** → pinned 回填 |
 
 **本轮分档结论**:22 个候选里「**零代码改动即可加入**」者仅 **Elasticsearch / Eclipse** 两个,且两者卡**产品口径**(服务型 / IDE 已够)而非技术;其余要么吃一处共通改动(且改完多数仍因镜像缺失收不了),要么单项特化。**ES / Eclipse 是否进实现轮 → 待用户拍板。**
+
+### F8 实况(2026-10-17:语言运行时 / SDK 类评估 → 用户拍板收 Groovy + Flutter)
+
+- **输入/口径**:用户 2026-10-17"**先考虑类似 jdk、python 这种的工具**"(Eclipse 这类官网单源 / IDE 先搁置)。候选池 = 《开发工具(全)》§1 语言运行时/SDK 全档 + JDK 同族发行版 + C/C++ 工具链,约 40 项。
+- **镜像存在性扫描(华为云 / 清华 / 中科大 × 33 路径,2026-10-17)**:命中真目录者仅 `lua`、`msys2`、`ruby`、`julia`、`flutter`、`erlang`、及既有 nodejs/python/openjdk;**其余全为华为云 ~12KB 零链接 SPA 兜底页或 404**(判据同 F6)。
+- **重点候选实测**:
+
+| 工具 | 实测依据(2026-10-17) | 结论 |
+|------|---------------------|------|
+| **Groovy** | 华为云/TUNA `apache/groovy/` 真目录(4.x/5.x/6.x 共 48 版);`apache-groovy-binary-4.0.28.zip` **PK ✓(206)**;解压顶层 `groovy-4.0.28/`(**有 `bin\groovy.bat`**);**真机整包下载 30,311,613 B,sha256 `6a052bfd2ca77d57…4840bfc54` 与官方 `archive.apache.org` `.sha256` 逐字节一致** | ✅ **收录**(零核心改动,同 Maven/Ant/JMeter 范式) |
+| **Flutter** | 华为云 `flutter/flutter_infra_release/releases/` 真(`stable/windows/*.zip` + `releases_windows.json`);JSON 共 636 条 / **139 stable**,每版本**内嵌 `sha256`**;zip 顶层 `flutter/`(Range 取中央目录实测);`bin\flutter.bat` | ✅ **收录**(需一处 jsonApi 小增强,见下) |
+| PHP | **无国内镜像**(华为云 `/php/` = SPA 兜底);官方单源 `downloads.php.net/~windows/` ~**0.99 MB/s**;`.sha256` 404 | 延后(单源 + 无侧车) |
+| Zulu / Corretto / Microsoft OpenJDK | 华为云 `/zulu/`、`/corretto/`、`/liberica/` **均为空壳**(3 链接);官方单源速度 MS CDN **1.92 MB/s** / Corretto **1.19 MB/s** / cdn.azul.com(采样被超时截断);**三者均无可取侧车**(Corretto `.sha256` 403/404;Zulu 无 `.sha256` 且 metadata API **无哈希字段**;MS 无侧车且 `aka.ms` 只有最新版) | **用户拍板:接受"官方单源 + pinned 回填" → 列入后续候选**(与 .NET 镜像例外同性质,本批不实现) |
+| Lua / MSYS2 / Ruby / Julia / Erlang / R | 镜像里分别只有**源码 tar.gz**(lua)、**pacman 包仓库**(msys2,五家镜像都只镜像仓库)、**源码**(ruby)、**包服务器**(julia,SDK zip 在 julialang-s3)、**yum 仓库页**(erlang 阿里云)、**空**(cran) | 不收(镜像无 win 发行包) |
+| Kotlin / Scala / Zig / Deno / Bun / Dart / Haskell / OCaml / Swift / Nim / Crystal / Perl / LLVM / Ninja / MinGW-w64 | 镜像扫描**全为 SPA 兜底或 404**;发行包仅在 GitHub release / 官方单源 / installer / 7z | 不收或延后(GitHub 依赖 / 需新通道 / installer 型) |
+
+- **用户拍板(2026-10-17)**:①**Groovy + Flutter 都收** → 进 F8-impl;②JDK 同族(Zulu / Corretto / Microsoft OpenJDK)"**接受官方单源 + pinned 回填**",**列入后续候选**(本批不实现)。
+- **F8-impl 范围(已定)**:Groovy 一份 catalog(**零核心改动**);Flutter 一份 catalog + **`catalog.ts` jsonApi 一处向后兼容增强**:
+  - (a) `listScan.pick` 由"仅 array 形的**资产**过滤"扩展为"**map 形也按字段过滤版本条目**"(Flutter 用 `{channel:"stable"}` 滤掉 beta/dev 与 636→139);
+  - (b) map 分支的 `checksumPath` 由"只当 URL 用"改为**内嵌哈希 / URL 分派**(64/128 hex → `checksum` 内联,配 `discoveredInline`;`http(s)://` → `checksumUrl` 照旧)—— **JetBrains(IDEA/PyCharm)不受影响**。
+- **状态**:登记完成,进入实现轮(见下「F8 实况 · 实现段」)。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

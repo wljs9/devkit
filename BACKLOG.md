@@ -8,7 +8,8 @@
 > **F7 评估轮已完成(2026-10-17:★4 档 9 个 + 《开发工具(全)》未评估 12 项全量实测 → **无一进入可收录档**,
 > 详见文末「F7 实况」;不动 catalog/门禁,商店仍 16 工具 / 192 例)。**
 > **当前活待办 = P2 用户清单(空)+ B 档剩余发落(.NET 镜像例外接受与否 / Eclipse 收录价值)+ pinned 发新版例行回填(F4 ③条)**;
-> F7 结论待用户拍板是否扩范围(若扩,唯一数据面达标者 = Elasticsearch,但属 v1.2 服务型路线)。
+> F7 结论待用户拍板是否扩范围;**实现成本分档已登记**(2026-10-17,见「F7 · 实现成本分档」节:
+> 零 core 改动即可加入者仅 **Elasticsearch / Eclipse** 两个,其余需共通改动或单项特化;是否进实现轮待拍板)。
 > 新会话先读 `CLAUDE.md` 启动指引,再回本表。
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
@@ -293,6 +294,52 @@
 - **建议优先级(供拍板)**:本轮 ★4 档 + 未评估项**无一进入"零/极小核心改动即可收录"档**,与 F6 ★3 档结论同向。若用户仍要扩范围,性价比排序仅两项:① **Elasticsearch**(镜像+校验双全,唯一数据面达标;代价 = 新增服务型安装模型:端口/内存/启停)→ 建议并入产品文档 §11 **v1.2 服务/数据库路线**统一设计;② **Bazel / draw.io**(单包形态可行,代价 = 接受 GitHub 依赖或 pinned 哈希回填)。其余维持不收。
 - **不改动**:本轮**不动 catalog、不动门禁**(商店仍 16 工具、`pnpm test` 192/192);全部工作 = 探测 + 本文件回写 + `scripts/f7-probe.mjs`。
 - **状态**:**评估完成,待用户拍板**(与原 B 档遗留 Eclipse / .NET 镜像例外一并发落;二者与本轮结论不重叠)。
+
+#### F7 · 实现成本分档(2026-10-17 用户"确认 1/2/3"后登记)
+
+> 用户口径:不问"要不要收",只问"**加进去要付多少代码成本**" —— 直接加 / 同一处设计改动解锁一组 / 单项特化。
+
+**分档依据 = core 能力边界复核(2026-10-17 读码确认,勿凭印象)**:
+
+| 边界 | 结论 | 出处 |
+|------|------|------|
+| 解压 | **只支持 zip**(`Expand-Archive`,且产物先改名 `bundle.zip`)—— **单文件二进制(exe 直接落盘)无通道** | `install.ts:187-203`,`expandZip` |
+| 版本发现 | 5 种原语,其中 **dirIndex 支持"静态模板拼路径"**(Tomcat 先例 `tomcat-11/v{ver}/bin/…`);Eclipse 同构(`release/{ver}/R/…`) | `catalog.ts:212`,F6 实况 |
+| 校验 | 6 种 kind,含 `officialSidecar`(**跨域背书**,S1 不破)/ `pinnedHash` / `discoveredInline`;侧车解析 `^[0-9a-f]{128}` 可直接吃 Eclipse 的 `hash *文件名` 格式 | `install.ts:109-149` |
+| 受管 PATH 入口 | 按 `layout`(+`binName`)自动派生,**C3 起新工具接入零配置** | `install.ts:51-73` |
+| 布局 | `binSubdir`(须有 `binName` 子目录)/ `binAtRoot`(非空即可) | `install.ts:274-279` |
+
+**档 1 · 可以直接加入(零 core 改动,只写一份 catalog JSON + 门禁测试)**
+
+| 工具 | 实测依据(2026-10-17) | 零改动理由 | 非代码前提 |
+|------|---------------------|-----------|-----------|
+| **Elasticsearch** | 华为云 `/elasticsearch/` 至 9.2.3;`elasticsearch-9.2.3-windows-x86_64.zip` **PK ✓(206)**;官方 `artifacts.elastic.co` 同名 `.zip.sha512` **200/169B** | dirIndex + 静态模板 + `officialSidecar`(跨域)+ `binSubdir` —— 四原语全现成 | **服务型**(端口 9200、须先起服务才能在终端用);属产品文档 §11 **v1.2 服务/数据库路线** |
+| **Eclipse** | NJU/**cernet** 镜像 `eclipse-java-2026-09-R-win32-x86_64.zip` **PK ✓(206)**;官方 `download.eclipse.org` 同名 `.sha512` **200/170B**,镜像侧车同在;USTC 302 → `mirrors.cernet.edu.cn` | dirIndex 扫 `2026-03/06/09/12` 发布线 + 静态模板 `release/{ver}/R/` + 侧车格式现成解析 + `binAtRoot` | **产品判断**:IDE 已有 IDEA/PyCharm/VS Code/DBeaver,包 ~500MB |
+
+> 附注:**WebStorm / GoLand / CLion** 与已收的 IDEA/PyCharm **完全同构**(同一 JetBrains `jsonApi` + `discoveredSidecar`),技术上零改动 —— 但**商业版无 CE**,属授权问题非技术问题,故不作候选。
+
+**档 2 · 需要「同一处设计改动」才能加入(一次改动解锁一组)**
+
+| 共通改动 | 解锁的工具 | 改完能否收 |
+|---------|-----------|-----------|
+| (a) **单文件二进制形态**(免解压,直接落文件) | kubectl / Minikube / Kind / Bazel | ❌ **仍不收** —— 四者 win 包**全在 GitHub release**,无国内镜像(本轮实测直连已连接重置) |
+| (b) **tar.gz 解压通道** | Kafka(及未来官方 tgz 系) | ⚠️ 通道通,但 Kafka 仍卡服务型(KRaft + 端口) |
+| (c) **服务型安装模型**(端口/初始化/启停/服务登记) | **ES / Nexus / SonarQube / Kafka / RabbitMQ / Jenkins** 一整批 | ⚠️ = 产品文档 §11 **v1.2 服务/数据库路线正题**,非本版收录问题;其中 Nexus/SonarQube/RabbitMQ 另各自缺镜像或缺侧车 |
+| (d) **installer(exe/msi)安装形态**(静默安装 + 卸载登记) | nmap / VirtualBox / Compass / Obsidian / RedisInsight / Fiddler / Charles | ❌ **仍不收** —— 全部无国内镜像 |
+
+**档 3 · 需要特化改动(单项定制,建议不做)**
+
+| 工具 | 特化点(多为叠加硬伤) |
+|------|---------------------|
+| Nexus | 无国内镜像 + 官方无侧车(须 pinned 持续回填)+ 服务型,**三重叠加** |
+| SonarQube | 要在安装模型里新引入「**外部数据库依赖**」(PG/SQL Server/Oracle) |
+| RabbitMQ | 需**外部 Erlang 运行时**(跨包依赖) |
+| Jenkins | war 需 servlet 容器 + 长驻服务 |
+| Kubernetes | 集群本体不可"下载安装",不适用 |
+| Apache httpd | 镜像 win32 目录**实测为空**,win 包仅第三方 Apache Lounge 发 |
+| draw.io | 便携 zip 有但**仅 GitHub + 无 `.sha256`** → pinned 回填 |
+
+**本轮分档结论**:22 个候选里「**零代码改动即可加入**」者仅 **Elasticsearch / Eclipse** 两个,且两者卡**产品口径**(服务型 / IDE 已够)而非技术;其余要么吃一处共通改动(且改完多数仍因镜像缺失收不了),要么单项特化。**ES / Eclipse 是否进实现轮 → 待用户拍板。**
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

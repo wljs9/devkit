@@ -37,5 +37,10 @@
   { "id": "nmap-dist", "kind": "dir", "url": "https://nmap.org/dist/", "grep": "href=\"([^\"]*\\.(?:exe|zip))\"" , "n": 6, "note": "只发 installer exe,无 win zip" },
   { "id": "drawio-zip", "kind": "zip", "url": "https://github.com/jgraph/drawio-desktop/releases/download/v32.4.1/draw.io-32.4.1-windows.zip", "note": "便携 zip 有,但仅 GitHub + 无侧车" },
   { "id": "compass", "kind": "bin", "url": "https://downloads.mongodb.com/compass/mongodb-compass-1.46.0-win32-x64.exe" },
-  { "id": "vbox-latest", "kind": "any", "url": "https://download.virtualbox.org/virtualbox/LATEST.TXT", "note": "系统级 installer + 驱动" }
+  { "id": "vbox-latest", "kind": "any", "url": "https://download.virtualbox.org/virtualbox/LATEST.TXT", "note": "系统级 installer + 驱动" },
+
+  { "id": "eclipse-nju-release", "kind": "dir", "url": "https://mirror.nju.edu.cn/eclipse/technology/epp/downloads/release/", "grep": "href=\"([0-9][^\"]*/)\"", "n": 6, "note": "发布线 2026-03/06/09/12" },
+  { "id": "eclipse-nju-win", "kind": "zip", "url": "https://mirror.nju.edu.cn/eclipse/technology/epp/downloads/release/2026-09/R/eclipse-java-2026-09-R-win32-x86_64.zip", "note": "PK ✓(档 1 依据)" },
+  { "id": "eclipse-nju-sha", "kind": "sha", "url": "https://mirror.nju.edu.cn/eclipse/technology/epp/downloads/release/2026-09/R/eclipse-java-2026-09-R-win32-x86_64.zip.sha512", "note": "镜像侧车:hsh *文件名" },
+  { "id": "eclipse-off-sha", "kind": "sha", "url": "https://download.eclipse.org/technology/epp/downloads/release/2026-09/R/eclipse-java-2026-09-R-win32-x86_64.zip.sha512", "note": "官方跨域侧车" }
 ]

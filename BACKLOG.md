@@ -172,7 +172,7 @@
   别在代码里找 `paths.envPlan`。新增 catalog 工具时,其 PATH 入口自动按 `layout/binName` 派生(无额外配置);
   若工具是 JDK 形态(要走 JAVA_HOME 而非 current\<tool>\bin),在 `toolManagedContribution` 的 jdk 特判里扩展。
 - 另:上一轮(2026-09-20 会话)曾有 PAT 前缀片段入日志、已建议轮换令牌 —— 凭据在 Windows 凭据管理器,
-  PAT 至 **2026-11-19**(2026-10-17 用户于 GitHub 查得更正);push 认证失败先按 CLAUDE.md 双态排查。
+  凭据现为 **Windows 凭据管理器条目 `git:https://github.com`(user=wljs9,2026-10-17 新加,有效期 2 个月 → 约 2026-12-17 到期)**;⚠ push 前**必须**按 CLAUDE.md「凭据与推送」临时覆盖 URL 级 helper(仓库 helper 指向未登录的 gh),详见该条。
 
 ### F5 未收录工具(2026-09-19 评估归档,收录与否待用户后续发落)
 
@@ -397,4 +397,4 @@ pnpm test             # 全绿(基线 170 例,新测试只增不减)
 pnpm dist             # 动了 catalog/打包链/主进程时:四段全绿,release/ 出新包
 ```
 每轮 commit 信息注明项编号(S1/S2/S3/B#/F#/C#),安全类改动修完建议复跑 `/security-review`。
-经用户验收后同步远端:**`git push origin main && git push origin --tags`**(2026-09-09 实测坑:`--follow-tags` 只推附注 tag,本仓库里程碑 tag 均为轻量,推不到)。远端 wljs9/devkit 为 **public**;凭据在 Windows 凭据管理器,PAT **2026-11-19** 过期(2026-10-17 用户查得);网络按 CLAUDE.md 双态排查(push 走 github.com,直连断时加 `-c http.proxy=http://127.0.0.1:65532`)。
+经用户验收后同步远端:**`git push origin main && git push origin --tags`**(2026-09-09 实测坑:`--follow-tags` 只推附注 tag,本仓库里程碑 tag 均为轻量,推不到)。远端 wljs9/devkit 为 **public**;凭据在 Windows 凭据管理器(`git:https://github.com`/user=wljs9,**约 2026-12-17 到期**),**push 须临时覆盖 helper**(`git -c credential.https://github.com.helper= -c credential.https://github.com.helper=manager …`,原因见 CLAUDE.md「凭据与推送」);网络按 CLAUDE.md 双态排查(push 走 github.com,直连断时加 `-c http.proxy=http://127.0.0.1:65532`)。

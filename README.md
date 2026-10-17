@@ -87,10 +87,10 @@ pnpm dist   # typecheck → test → build → NSIS 安装包(release/devkit-set
 ## 已知边界(v0.x / MVP)
 
 - 仅支持 **Windows 10/11 x64**;日常运行**不需要管理员**;
-- 收录工具:Node.js、JDK (Temurin)、Maven、Python、Git (MinGit)、VS Code、IntelliJ IDEA CE、PyCharm CE、DBeaver、Gradle、Go、SQLite (CLI)、Apache JMeter、Apache Ant、Apache Tomcat、.NET SDK;
-  - 多版本:Node/Maven/JDK/Gradle/Go 全量历史版(各留最新 10 版展示);Python/DBeaver/SQLite 各留最新数版;Git/VS Code 镜像源只留最新稳定版;
-  - 校验与更新口径:官方发 sidecar 的直接取(Gradle=官方 `.sha256`、JetBrains、Maven=官方 `.sha512`);API 内嵌的随发现携带(JDK=Adoptium API、Go=官方 dl API);官方不发布的走清单内嵌哈希表(Python/Git/DBeaver/VS Code/SQLite,发新版例行更新,**下载永远校验**,未收录版本拒装);
-  - Gradle 运行依赖本机 JAVA_HOME(`gradle` 命令才能跑,安装本身不需要);SQLite 收录的是命令行工具包(sqlite3/sqldiff 等,不含 GUI 与 sqlite3.dll);
+- 收录工具(**18 个**):Node.js、JDK (Temurin)、Maven、Python、Git (MinGit)、VS Code、IntelliJ IDEA CE、PyCharm CE、DBeaver、Gradle、Go、SQLite (CLI)、Apache JMeter、Apache Ant、Apache Tomcat、.NET SDK、Apache Groovy、Flutter SDK;
+  - 多版本:Node/Maven/JDK/Gradle/Go 全量历史版(各留最新 10 版展示);Python/DBeaver/SQLite 各留最新数版;Git/VS Code 镜像源只留最新稳定版;Groovy 4/5/6 线全量(48 版);Flutter 稳定版留最新 20 版;
+  - 校验与更新口径:官方发 sidecar 的直接取(Gradle=官方 `.sha256`、Groovy=官方 archive `.sha256`、JetBrains、Maven=官方 `.sha512`);API/JSON 内嵌的随发现携带(JDK=Adoptium API、Go=官方 dl API、Flutter=官方 `releases_windows.json` 的 `sha256` 字段);官方不发布的走清单内嵌哈希表(Python/Git/DBeaver/VS Code/SQLite,发新版例行更新,**下载永远校验**,未收录版本拒装);
+  - Gradle/Groovy 运行依赖本机 JAVA_HOME(`gradle`/`groovy` 命令才能跑,安装本身不需要);**Flutter 运行依赖 Git**,且 SDK 包 ~1GB;SQLite 收录的是命令行工具包(sqlite3/sqldiff 等,不含 GUI 与 sqlite3.dll);
   - 数据库类工具(Python 生态的 pip/tkinter、DBeaver 插件等)与更多工具见路线图(产品文档 §11);
 - Electron 体积:安装包 ~90-120MB(选型时声明的代价,技术手册 §1),"用时才开"非常驻;
 - Temurin 历史版本下载依赖第三方 GitHub 加速器 ghfast.top(设置页可换前缀/关代理);

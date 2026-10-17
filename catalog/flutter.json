@@ -1,0 +1,54 @@
+{
+  "id": "flutter",
+  "displayName": "Flutter SDK",
+  "listKind": "jsonApi",
+  "listApi": "https://mirrors.huaweicloud.com/flutter/flutter_infra_release/releases/releases_windows.json",
+  "listScan": {
+    "shape": "map",
+    "root": "releases",
+    "versionPath": "version",
+    "assetPath": "archive",
+    "checksumPath": "sha256",
+    "pick": { "channel": "stable" }
+  },
+  "rawVersion": true,
+  "maxVersions": 20,
+  "fileRegex": "^flutter_windows_.*\\.zip$",
+  "sources": [
+    {
+      "id": "huawei",
+      "fileUrl": "https://mirrors.huaweicloud.com/flutter/flutter_infra_release/releases/{asset}",
+      "note": "★ F8-impl 实测 2026-10-17:华为云 flutter_infra_release/releases/ 真目录(stable/windows/*.zip 与 releases_windows.json 均在);asset 为 JSON 的 archive 字段(相对路径 stable/windows/flutter_windows_<ver>-stable.zip)"
+    },
+    {
+      "id": "google",
+      "fileUrl": "https://storage.googleapis.com/flutter_infra_release/releases/{asset}",
+      "proxyable": true,
+      "note": "官方源兜底(releases_windows.json 的 base_url 即此),境外;走代理"
+    }
+  ],
+  "checksum": {
+    "kind": "discoveredInline",
+    "algo": "sha256",
+    "note": "★ F8-impl:releases_windows.json 每版本内嵌 sha256(64 hex),随发现结果携带 —— 与 Go(.NET)的 discoveredInline 同范式,下载仍永远校验(§3.5)"
+  },
+  "rootDir": "flutter",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\flutter.bat"],
+    "exec": "bin\\flutter.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "releaseFile", "file": "version", "regex": "^v?(\\d+\\.\\d+\\.\\d+)", "note": "Flutter SDK 根目录的 version 文件即纯版本串,零执行风险" },
+      { "kind": "dirName", "regex": "flutter[-_]?(\\d+\\.\\d+\\.\\d+)", "note": "目录名兜底" },
+      { "kind": "exec", "exe": "bin\\flutter.bat", "args": ["--version"], "regex": "Flutter (\\d+\\.\\d+\\.\\d+)", "note": "末位兜底:需 Git 且较慢,故排在最后" }
+    ],
+    "note": "★ F8-impl 接管既有 Flutter SDK。注意:Flutter 运行依赖 Git(外部依赖,属工具常识);SDK 包 ~1GB,安装耗时较长"
+  },
+  "assetNamingNote": "releases_windows.json 为 {base_url, current_release, releases[]} 结构;releases 每项含 version/channel/archive/sha256。listScan.shape=map + root=releases 取条目,assetPath=archive 取相对路径,checksumPath=sha256 由 F8-impl 的【内嵌哈希/URL 分派】识别为内嵌哈希(非 URL);pick={channel:stable} 从 636 条滤出 139 条稳定版。zip 顶层为 flutter/(Range 取中央目录实测),bin\\flutter.bat 在其中",
+  "m0": {
+    "verifiedAt": "2026-10-17",
+    "sample": "3.29.3",
+    "evidence": "F8-impl 探测:华为云 releases_windows.json 636 条/139 stable,每版本内嵌 sha256;zip 顶层 flutter/ 经 Range 尾取中央目录核实;stable/windows/flutter_windows_3.29.3-stable.zip 可达"
+  }
+}

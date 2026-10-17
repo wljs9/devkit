@@ -21,11 +21,11 @@ import { startFileServer, stubResponses } from './helpers/server';
 
 // ---- 真实仓库 catalog:加载即门禁(M1 测试不许绕过实测定稿文件) ----
 describe('catalog/ 定稿文件(§6)', () => {
-  it('catalog/ 全部清单通过 zod 校验(基线三 + F4 六个 + F5 三个 + F6-impl 四个)', () => {
+  it('catalog/ 全部清单通过 zod 校验(基线三 + F4 六个 + F5 三个 + F6-impl 四个 + F8-impl 两个)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url)); // tests/ 上一级即仓库根
     const entries = loadCatalogDir(dir);
     expect(entries.map((e) => e.id).sort()).toEqual([
-      'ant', 'dbeaver', 'dotnet', 'git', 'go', 'gradle', 'idea', 'jdk', 'jmeter', 'maven', 'node', 'pycharm', 'python', 'sqlite', 'tomcat', 'vscode',
+      'ant', 'dbeaver', 'dotnet', 'flutter', 'git', 'go', 'gradle', 'groovy', 'idea', 'jdk', 'jmeter', 'maven', 'node', 'pycharm', 'python', 'sqlite', 'tomcat', 'vscode',
     ]);
   });
   it('★ F6-impl 定稿门禁:四个新工具镜像/校验/布局判据', () => {
@@ -54,6 +54,32 @@ describe('catalog/ 定稿文件(§6)', () => {
     expect(dn.checksum).toMatchObject({ kind: 'discoveredInline', algo: 'sha512' });
     expect(dn.layout).toBe('binAtRoot');
     expect(dn.rootDir).toBe('');
+  });
+  it('★ F8-impl 定稿门禁:Groovy/Flutter 镜像/校验/布局判据', () => {
+    const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
+    const byId = new Map(loadCatalogDir(dir).map((e) => [e.id, e]));
+    // Groovy:Apache 同范式 —— dirIndex + 官方 .sha256 跨域 sidecar(镜像不同步校验,S1)+ binSubdir
+    const g = byId.get('groovy')!;
+    expect(g.listKind).toBe('dirIndex');
+    expect(g.checksum.kind).toBe('officialSidecar');
+    expect(g.checksum.algo).toBe('sha256'); // Groovy 只发 sha256(Maven/Ant/Tomcat 是 sha512)
+    expect(g.checksum.urls![0]).toContain('archive.apache.org'); // 跨域背书,不与下载源同 host
+    expect(g.sources[0]!.fileUrl).toContain('/{ver}/distribution/apache-groovy-binary-{ver}.zip');
+    expect(g.rootDir).toBe('groovy-{ver}');
+    expect(g.layout).toBe('binSubdir');
+    expect(g.adopt!.version[0]!.kind).toBe('fileGlob'); // lib\groovy-<ver>.jar 零执行先行
+    // Flutter:jsonApi map + 内嵌 sha256 + pick=stable + binSubdir
+    const f = byId.get('flutter')!;
+    expect(f.listKind).toBe('jsonApi');
+    expect(f.listScan?.shape).toBe('map');
+    expect(f.listScan?.root).toBe('releases');
+    expect(f.listScan?.assetPath).toBe('archive');
+    expect(f.listScan?.checksumPath).toBe('sha256');
+    expect(f.listScan?.pick).toEqual({ channel: 'stable' }); // 636 条 → 139 条稳定版
+    expect(f.checksum).toMatchObject({ kind: 'discoveredInline', algo: 'sha256' });
+    expect(f.sources[0]!.fileUrl).toContain('/releases/{asset}'); // 镜像源拼相对 archive 路径
+    expect(f.layout).toBe('binSubdir');
+    expect(f.adopt!.version[0]!.kind).toBe('releaseFile'); // SDK 根 version 文件零执行
   });
   it('S1 定稿门禁:Node 校验源首位必须是官方 nodejs.org(与默认下载源跨域,镜像 sidecar 只兜底)', () => {
     const dir = url.fileURLToPath(new URL('../catalog', import.meta.url));
@@ -577,6 +603,73 @@ describe('F5 regexPage(sqlite.org download.html 形态)', () => {
     expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: undefined }).success).toBe(false);
     expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: '^x$', sources: [{ id: 'o', fileUrl: 'x' }] }).success).toBe(false);
     expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'regexPage', dirRegex: '^x$' }).success).toBe(true);
+  });
+});
+
+/** ★ F8-impl(2026-10-17):jsonApi map 增强 —— Flutter releases_windows.json 形态 */
+describe('F8-impl jsonApi map(pick 字段过滤 + 内嵌哈希/URL 分派)', () => {
+  function flutterCatalog() {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'flutter', displayName: 'Flutter SDK', listKind: 'jsonApi',
+      listApi: 'https://fl.invalid/releases_windows.json',
+      listScan: {
+        shape: 'map', root: 'releases', versionPath: 'version',
+        assetPath: 'archive', checksumPath: 'sha256', pick: { channel: 'stable' },
+      },
+      rawVersion: true, maxVersions: 10,
+      fileRegex: '^flutter_windows_.*\\.zip$',
+      sources: [{ id: 'huawei', fileUrl: 'https://fl.invalid/releases/{asset}' }],
+      checksum: { kind: 'discoveredInline', algo: 'sha256' },
+      rootDir: 'flutter', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    return r.data;
+  }
+
+  it('map 形 pick 按字段滤条目(beta 剔除)+ sha256 字段识别为内嵌哈希(非 URL)+ asset 取相对路径', async () => {
+    const body = JSON.stringify({
+      base_url: 'https://storage.googleapis.com/flutter_infra_release/releases',
+      releases: [
+        { version: '3.29.3', channel: 'stable', archive: 'stable/windows/flutter_windows_3.29.3-stable.zip', sha256: 'a'.repeat(64) },
+        { version: '3.32.0-0.3.pre', channel: 'beta', archive: 'beta/windows/flutter_windows_3.32.0-0.3.pre-beta.zip', sha256: 'b'.repeat(64) }, // 非 stable → 滤
+        { version: '3.27.4', channel: 'stable', archive: 'stable/windows/flutter_windows_3.27.4-stable.zip', sha256: 'c'.repeat(64) },
+        { version: '3.24.0', channel: 'stable', archive: 'stable/windows/flutter_windows_3.24.0-stable.zip' }, // 无 sha256 → 跳过
+      ],
+    });
+    const { fn } = await stubResponses({ 'https://fl.invalid/releases_windows.json': body });
+    const vs = await listVersions(flutterCatalog(), { fetchImpl: fn });
+    expect(vs.map((v) => v.version)).toEqual(['3.29.3', '3.27.4']); // beta 被 pick 滤掉;无哈希条目跳过
+    expect(vs[0]!.asset).toBe('stable/windows/flutter_windows_3.29.3-stable.zip');
+    expect(vs[0]!.checksum).toEqual({ algo: 'sha256', hex: 'a'.repeat(64) }); // 内嵌哈希随发现携带
+    expect(vs[0]!.checksumUrl).toBeUndefined(); // 不再被误当 URL
+    expect(fileUrlFor(flutterCatalog(), 'huawei', { asset: vs[0]!.asset })).toBe(
+      'https://fl.invalid/releases/stable/windows/flutter_windows_3.29.3-stable.zip',
+    );
+  });
+
+  it('回归:map 形 checksumPath 是 URL 时仍走 checksumUrl(JetBrains 行为不变)', async () => {
+    const r = CatalogEntrySchema.safeParse({
+      id: 'idea', displayName: 'IDEA', listKind: 'jsonApi', listApi: 'https://jb.invalid/iic',
+      listScan: { shape: 'map', root: 'IIC', versionPath: 'version', assetPath: 'downloads.windowsZip.link', checksumPath: 'downloads.windowsZip.checksumLink' },
+      rawVersion: true,
+      fileRegex: '^ideaIC-.*\\.win\\.zip$',
+      sources: [{ id: 'official', fileUrl: '{asset}' }],
+      checksum: { kind: 'discoveredSidecar', algo: 'sha256' },
+      rootDir: 'idea', layout: 'binSubdir',
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const body = JSON.stringify({
+      IIC: [{ version: '2025.3', downloads: { windowsZip: { link: 'https://dl.jb.invalid/ideaIC-2025.3.win.zip', checksumLink: 'https://dl.jb.invalid/ideaIC-2025.3.win.zip.sha256' } } }],
+    });
+    const { fn } = await stubResponses({ 'https://jb.invalid/iic': body });
+    const vs = await listVersions(r.data, { fetchImpl: fn });
+    expect(vs[0]!.checksumUrl).toBe('https://dl.jb.invalid/ideaIC-2025.3.win.zip.sha256');
+    expect(vs[0]!.checksum).toBeUndefined();
+  });
+
+  it('schema 守门:map 形 pick 为可选(缺省不滤)', () => {
+    const e = nodeCatalog();
+    expect(CatalogEntrySchema.safeParse({ ...e, listKind: 'jsonApi', listApi: 'https://x.invalid/a', listScan: { shape: 'map', root: 'releases' } }).success).toBe(true);
   });
 });
 

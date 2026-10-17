@@ -96,7 +96,8 @@ const ListScanSchema = z
     assetPath: z.string().optional(),
     checksumPath: z.string().optional(),
     sizePath: z.string().optional(),
-    /** ★ F5 array 型(Go):每版本内选目标资产的过滤键(如 os/arch/kind),全部命中才取 */
+    /** ★ F5 array 型(Go):每版本内选目标资产的过滤键(如 os/arch/kind),全部命中才取
+     *  ★ F8-impl:map 型(listScan.root 指向的版本数组)同样消费 —— 按条目字段过滤(Flutter 用 {channel:"stable"}) */
     pick: z.record(z.string()).optional(),
     /** ★ F5:版本串规整正则(首捕获组=版本;Go 的 "go1.27.1" → "1.27.1")。仅 array 形状消费 */
     versionRegex: z.string().optional(),
@@ -423,17 +424,31 @@ function parseJsonApi(entry: CatalogEntry, json: unknown): DiscoveredVersion[] {
   } else {
     const rootList = Array.isArray(dotGet(json, scan.root ?? '')) ? (dotGet(json, scan.root ?? '') as unknown[]) : [];
     for (const item of rootList) {
+      // ★ F8-impl(2026-10-17):map 形也按 pick 过滤**版本条目**(Flutter releases_windows.json 用
+      // {channel:"stable"} 从 636 条里滤出 139 条稳定版);array 形原有的"资产级 pick"语义不变。
+      if (scan.pick && !Object.entries(scan.pick).every(([k, want]) => dotGet(item, k) === want)) continue;
       const version = normalVersion(String(dotGet(item, scan.versionPath ?? '') ?? ''), entry.rawVersion ?? true);
       const link = String(dotGet(item, scan.assetPath ?? '') ?? '');
       if (!version || !link) continue; // 无资产的发行版条目跳过(源码包/仅 win exe 等)
       const sizeRaw = Number(dotGet(item, scan.sizePath ?? ''));
+      // ★ F8-impl:checksumPath 由"只当 URL"改为【内嵌哈希 / URL 分派】—— 64/128 hex 视为内嵌哈希
+      // (配 discoveredInline,Flutter 的 sha256 字段);http(s):// 仍走 checksumUrl(JetBrains checksumLink 不变)。
+      const csRaw = scan.checksumPath ? String(dotGet(item, scan.checksumPath) ?? '') : '';
+      const inlineCs =
+        /^[0-9a-f]{128}$/i.test(csRaw) ? ({ algo: 'sha512', hex: csRaw.toLowerCase() } as const)
+        : /^[0-9a-f]{64}$/i.test(csRaw) ? ({ algo: 'sha256', hex: csRaw.toLowerCase() } as const)
+        : undefined;
+      // ★ F8-impl:discoveredInline 的工具,条目缺内嵌哈希就**不列** —— 列了也装不上(install 期 checksum-missing)。
+      // 与 adoptiumApi 解析里"哈希不合规即跳过"同精神(§3.5:宁可不列,不可列了装不上)。
+      if (entry.checksum.kind === 'discoveredInline' && !inlineCs) continue;
       out.push({
         tool: entry.id,
         version,
         dir: version,
         asset: link,
         size: Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : undefined,
-        checksumUrl: scan.checksumPath ? String(dotGet(item, scan.checksumPath) ?? '') || undefined : undefined,
+        checksum: inlineCs,
+        checksumUrl: !inlineCs && /^https?:\/\//i.test(csRaw) ? csRaw : undefined,
         preferredSourceId: entry.sources[0]!.id,
       });
     }

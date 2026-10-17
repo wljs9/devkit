@@ -1,0 +1,56 @@
+{
+  "id": "groovy",
+  "displayName": "Apache Groovy",
+  "listKind": "dirIndex",
+  "dirRegex": "^(?<ver>[456]\\.\\d+\\.\\d+)/$",
+  "fileRegex": "^apache-groovy-binary-(?<ver>[456]\\.\\d+\\.\\d+)\\.zip$",
+  "versionPolicy": { "excludeRc": true },
+  "sources": [
+    {
+      "id": "huawei",
+      "listUrl": "https://mirrors.huaweicloud.com/apache/groovy/",
+      "fileUrl": "https://mirrors.huaweicloud.com/apache/groovy/{ver}/distribution/apache-groovy-binary-{ver}.zip",
+      "note": "★ F8-impl 实测 2026-10-17:华为云 apache/groovy 真目录(4.x/5.x/6.x 共 48 版);4.0.28 binary zip PK 魔数通过、Range 206;解压顶层 groovy-<ver>/,含 bin\\groovy.bat;整包 sha256 与官方一致"
+    },
+    {
+      "id": "tuna",
+      "listUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/groovy/",
+      "fileUrl": "https://mirrors.tuna.tsinghua.edu.cn/apache/groovy/{ver}/distribution/apache-groovy-binary-{ver}.zip",
+      "note": "★ F8-impl 实测:清华 apache/groovy 真目录,作华为云兜底"
+    },
+    {
+      "id": "archive",
+      "listUrl": "https://archive.apache.org/dist/groovy/",
+      "fileUrl": "https://archive.apache.org/dist/groovy/{ver}/distribution/apache-groovy-binary-{ver}.zip",
+      "proxyable": true,
+      "note": "全历史兜底,境外;自带 .sha256 侧车"
+    }
+  ],
+  "checksum": {
+    "kind": "officialSidecar",
+    "algo": "sha256",
+    "urls": [
+      "https://archive.apache.org/dist/groovy/{ver}/distribution/apache-groovy-binary-{ver}.zip.sha256",
+      "https://dlcdn.apache.org/groovy/{ver}/distribution/apache-groovy-binary-{ver}.zip.sha256"
+    ],
+    "note": "★ F8-impl 实测 2026-10-17:官方 .sha256 侧车 200(archive 4.0.28 与 5.1.3 均验;镜像不同步校验 → 走官方跨域,S1 红线)。与 Maven 同范式,差异仅 algo=sha256(Groovy 只发 sha256,不发 sha512)"
+  },
+  "rootDir": "groovy-{ver}",
+  "layout": "binSubdir",
+  "adopt": {
+    "markers": ["bin\\groovy.bat"],
+    "exec": "bin\\groovy.bat",
+    "binDir": "bin",
+    "version": [
+      { "kind": "fileGlob", "dir": "lib", "pattern": "^groovy-(\\d+\\.\\d+\\.\\d+)\\.jar$", "note": "lib\\groovy-<ver>.jar 即发行版版本(zip 实测存在:lib/groovy-4.0.28.jar),零执行风险" },
+      { "kind": "dirName", "regex": "^groovy-(\\d+\\.\\d+\\.\\d+)", "note": "目录名兜底" },
+      { "kind": "exec", "exe": "bin\\groovy.bat", "args": ["--version"], "regex": "Groovy Version: (\\d+\\.\\d+\\.\\d+)", "note": "末位兜底:groovy.bat 经 cmd.exe /c 执行(需 JAVA_HOME,属工具常识)" }
+    ],
+    "note": "★ F8-impl 接管既有 Groovy(如 C:\\groovy-5.1.3 或 IDE/SDKMAN 自带分发)。运行需 JAVA_HOME —— 与 Maven/Gradle 同属工具常识,非收录缺陷"
+  },
+  "m0": {
+    "verifiedAt": "2026-10-17",
+    "sample": "4.0.28",
+    "evidence": "F8-impl 真机:华为云整包 30,311,613 B,sha256 6a052bfd2ca77d57e0db304a313dd9a729945c5a31420e6d48505be4840bfc54 = 官方 archive .sha256;zip 顶层 groovy-4.0.28/,含 bin\\groovy.bat 与 lib\\groovy-4.0.28.jar"
+  }
+}

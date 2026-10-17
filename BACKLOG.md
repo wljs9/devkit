@@ -1,11 +1,14 @@
 # DevKit — 待办与流程清单(新会话按此继续)
 
-> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2);2026-09-21(C3 登记待接单)。
+> 建立:2026-09-08;改版:2026-09-09(安全修复轮 + R1 发布完成后重组);2026-09-14(P2 首批三项 F1/F2/F3 完成并回写);2026-09-16(F4 一星工具批量收录登记);2026-09-19(F5 二星第一批收录登记);2026-09-20(F5 收尾关闭 + 登记 C1/C2);2026-09-21(C3 登记待接单);2026-10-17(F7 ★4 档 + 《开发工具(全)》未评估项评估轮完成)。
 > 用法:新会话开场读 `CLAUDE.md` → 本文件。
 > **当前状态:S1/S2/S3 + R1 已发布;F1–F5 全部完成;C1–C3 全部完成;**F6 评估 + 实现轮已全部完成并发布
 > (2026-09-24:评估 ★3 档 + 收录 4 工具 JMeter/Ant/Tomcat/.NET SDK → 走查通过 → push → **Release v1.6.0**;
 > 商店 16 工具,门禁 192/192;详见文末「F6 实况」)。**
-> **当前活待办 = P2 用户清单(空)+ B 档剩余发落(.NET 镜像例外接受与否 / Eclipse 收录价值)+ pinned 发新版例行回填(F4 ③条)。**
+> **F7 评估轮已完成(2026-10-17:★4 档 9 个 + 《开发工具(全)》未评估 12 项全量实测 → **无一进入可收录档**,
+> 详见文末「F7 实况」;不动 catalog/门禁,商店仍 16 工具 / 192 例)。**
+> **当前活待办 = P2 用户清单(空)+ B 档剩余发落(.NET 镜像例外接受与否 / Eclipse 收录价值)+ pinned 发新版例行回填(F4 ③条)**;
+> F7 结论待用户拍板是否扩范围(若扩,唯一数据面达标者 = Elasticsearch,但属 v1.2 服务型路线)。
 > 新会话先读 `CLAUDE.md` 启动指引,再回本表。
 
 ## ✅ 归档:安全修复轮 + 发布(2026-09-09 完成;R1 节可复用为下一版发布配方)
@@ -69,6 +72,7 @@
 | C3 | 改进 | **"装什么管什么"——受管 PATH 条目随安装动态化**(《功能改进建议.md》2026-09-21 第 1 条,推翻 M3 决策 A"固定 3 条"口径):凡本软件下载安装或接管的工具,其 PATH 入口(`current<tool>` 或 `current<tool><bin|binName>` 按 catalog 布局)由软件**接入**,装后可直接在新终端使用;**卸载/移出登记自动断开**;环境页受管区=全部实际在管工具逐条 ✓/⚠;**装了 jdk 才写 JAVA_HOME(悬空根治)**。边界已全部确认(接单时):①装完自动接入;②接管同权自动接入;③JAVA_HOME 装 jdk 才写;④快照全量恢复照旧。**验收:安装/接管即自动接入(新终端直接用)、卸载/移出登记自动断开、环境页受管区随在管工具逐条展示、JAVA_HOME 不再悬空、切换版本依旧零 PATH 变动。** | ✅ 完成并推送 2026-09-22 · commit `e33a892`(见 C3 实况) |
 | F6 | 评估轮 | **评估可继续收录的工具**(《功能改进建议.md》2026-09-24 新条;输入=《常用工具列表(分星级)》《开发工具(全)》):对候选工具分档评估 —— ①国内镜像可用性(**PK 魔数/Range 206 验真**);②校验和可获得性(官方 sidecar / API 内嵌 / pinned 回填负担);③单 zip 解压即用模型适配(含 adopt);④配置/初始化成本。**产出:分档评估归档 + 建议收录优先级清单,回写 BACKLOG/F6 实况,待用户拍板后再进实现轮。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-09-24(结论见 F6 实况,待用户拍板) |
 | F6-impl | 功能 | **实现收录 4 个工具**(用户 2026-09-24 拍板"四个都做"):**JMeter / Ant / Tomcat / .NET SDK**。实际实现比评估预估更省:**Tomcat 无需两级扫描**(dirIndex 的 fileUrl 模板静态拼 `v{ver}/bin/`,同 Maven 的 `{ver}/binaries/` 形态,F5 归档前提作废);唯一 core 改动 = **catalog.ts jsonApi array 增强**(root 取对象内嵌数组、assetNamePath 取 url 末段、fileRegex 过滤同 rid 的 exe、哈希长度分派 128hex→sha512),Go 形态完全兼容回归。四工具:jmeter/ant/tomcat=officialSidecar sha512(官方 archive 跨域,同 Maven),dotnet=discoveredInline sha512(官方 releases.json 内嵌,同 Go)。**验收:四工具版本发现真机全过 + 三工具真机安装闭环(ant/jmeter/tomcat)+ 门禁 192/192(基线 188 + 4)+ typecheck + dist 四段全绿。dotnet 200MB 大包未真装,由走查覆盖。** | ✅ 已发布 2026-09-24 · commit `cde3342` → Release **v1.6.0**(见 F6 实现段发布实况) |
+| F7 | 评估轮 | **评估 ★4 档工具可否收录**(《功能改进建议.md》2026-10-17 单条"评估一些 4 星的工具是否可收录,与《开发工具(全)》参考"):候选池 = 《常用工具列表(分星级)》★4 档 9 个 + 《开发工具(全)》同难度未评估 12 项;判据沿用 F5/F6(镜像 PK 魔数/Range 206 验真 + 校验侧车 + 单 zip 解压即用 + 初始化成本);F6 已归档的镜像缺项不复测。**产出:分档实测结论 + 建议优先级(见 F7 实况)。本轮不收录、不动 catalog/门禁。** | ✅ 评估完成 2026-10-17(结论:★4 全档无一可收,见 F7 实况;待用户拍板) |
 
 ### F 轮实况(2026-09-14,三项一次交付 —— 用户要求"修完后上传 GitHub",故合并为一轮)
 
@@ -245,6 +249,50 @@
 - **行为注意(走查时看)**:①商店页四工具可见、版本列表不爆表(jmeter 16/ant 22/tomcat 24/dotnet 13);②ant/jmeter/tomcat 装后即可用(`ant -version`/`jmeter --version`/`tomcat` 启动 — 均需本机 JAVA_HOME,同 Gradle 常识);③dotnet 装后 `dotnet --version`;④四工具接管既有目录可用。
 - **状态**:实现完成 + 自测通过,按用户指示停止,等走查;验收后 push。
 - **✅ 发布实况(2026-09-24,走查通过 → push → Release)**:用户走查通过 + VPN 开。推送 5 commit(`4c03c10`→`cde3342`,经 127.0.0.1:65532 代理);bump `package.json` 0.4.1 → **0.5.0**(§10 单一来源),文档回写同一 commit `c3f5dba`(产品文档 v1.6 / 技术手册 v1.9 / README / CLAUDE.md);`pnpm dist` 四段全绿重出 **`devkit-setup-0.5.0.exe`(85,192,011 B**,SHA-256 `895713dfce0e19583284939df5bdf37deb2cfbb38457f9eda6ad4cf62025970f`);轻量 tag **`v1.6.0`**(沿双轨约定=产品文档 v1.6,`git push origin main && git push origin v1.6.0`);**Release v1.6.0(prerelease)** id 395336853 = `https://github.com/wljs9/devkit/releases/tag/v1.6.0`,附件 `devkit-setup-0.5.0.exe` 上传 state=uploaded,正文附 SHA-256 供比对。**F6 轮关闭。** 待办入口回到 BACKGROUND P2 + B 档剩余发落(.NET 镜像例外 / Eclipse 价值),pinned 发新版例行回填(F4 ③条)。
+
+### F7 实况(2026-10-17:★4 档 + 《开发工具(全)》未评估项评估轮 —— 结论就绪,待用户拍板)
+
+- **输入**:用户 2026-10-17 指示"评估一些 4 星的工具是否可收录,与《开发工具(全)》进行参考"。范围已复述确认两处边界(开工前问过):①候选池 = 《常用工具列表(分星级)》★4 档 9 个 **+** 《开发工具(全)》同难度且从未评估的 12 项;②F6 已归档的镜像缺项(Terraform/Prometheus/Grafana/CMake/Nginx 等)**不复测,沿用归档**。
+- **判据(沿用 F5/F6,不改)**:①国内镜像可用(**PK 魔数 / Range 206 验真**,不信状态码;华为云目录页带 UI 壳,~12KB 零链接=SPA 兜底页);②校验和可获得(官方 sidecar / API 内嵌 / pinned 回填负担可接受);③**单 zip 解压即用**(或单二进制即用)模型适配;④初始化成本 ≤ 工具常识。
+- **⚠ 探测环境铁律(新会话勿踩,本轮踩过)**:①**Node 原生 `fetch` 在本机被沙箱代理污染** —— 同一 URL 用 fetch 实测得 403/501/魔数错乱(如 dl.k8s.io 的 .sha256 报 501、kafka tgz 魔数报 `1ffd0800`),**换 curl 全部正常**;故本轮所有探测改走 curl(`scripts/f7-probe.mjs`),Node fetch 结果一律不可信。②**TUNA 对 `Mozilla/5.0` UA 返回 403 假阴性**(误判"镜像不存在"),默认 curl UA 才是真值 —— 探针不设自定义 UA。③**本机 GitHub 连通性双态实锤**(复跑时 `api.github.com` 可查资产清单、release 资产一度 200,**但随后直连 `github.com` 连接重置 / 21s 超时**)—— 与 CLAUDE.md「取决于加速器开关」一致;故本轮凡"**仅 GitHub release 有 win 包**"的候选,一律按"依赖加速器、不满足镜像支柱"记入不收/延后(同 F6 对 Neovim 的先例)。
+- **脚本**:`scripts/f7-probe.mjs`(curl 版四项探针)+ `scripts/f7-probes.json`(本轮全部探测清单,可 `node scripts/f7-probe.mjs scripts/f7-probes.json` 一键复跑)。
+
+**★4 档 9 个(实测 2026-10-17)**:
+
+| 工具 | 国内镜像可用性(实测) | 校验和可获得性 | 形态 / 初始化成本 | 结论 |
+|------|---------------------|---------------|------------------|------|
+| **Kafka** | 华为云 `apache/kafka/`(81 链接,至 **4.4.0**)+ TUNA(4.x 线)真目录,均可用;但**发行包只有 `.tgz`,无 zip**(3.9.0/4.4.0 实测目录仅 `kafka_2.13-x.tgz`) | 官方 `archive.apache.org` `.sha512` 侧车在(210B 实测 200) | 需**新增 tar.gz 解压通道**(同 F5 对 Rust 的归档理由)+ 服务型(KRaft/ZooKeeper + 端口 + 多进程) | **不收**(通道 + 服务型) |
+| **RabbitMQ** | **无国内镜像**:华为云 `/rabbitmq/` 为 12KB 零链接 SPA 兜底页,TUNA/USTC `/rabbitmq/` 均 404 | win 包只在 GitHub release(境内需加速器;实测 404) | 需**外部 Erlang 运行时**(硬依赖,非同包)+ 服务型(端口/管理台) | **不收** |
+| **Elasticsearch** | **华为云完整可用**:`/elasticsearch/` 332 链接,至 **9.2.3**;`elasticsearch-9.2.3-windows-x86_64.zip` **PK 魔数 ✓**,**同名 `.zip.sha512` 侧车在**;TUNA `/elasticstack/` 6.x–9.x 全在 | **✓ 镜像自带 sidecar**(镜像+校验双全,本批唯一) | 服务型:端口 9200、内存要求、需改 `elasticsearch.yml`;自带 bundled JDK | **延后**(数据面唯一达标者,但属产品文档 §11 **v1.2 服务/数据库路线**,与 MySQL 等一批设计) |
+| **Minikube** | 华为云 `/kubernetes/` **仅 apt/yum 仓库**(3 链接,无 win 二进制);win exe 只在 GitHub release | GitHub 资产带 `.sha256`(初次实测 200 取到哈希;直连复跑已连接重置) | 单 exe 即用**但需容器运行时**(Docker/WSL2/Hyper-V)才能真正起集群 | **不收**(模型外 + GitHub 依赖) |
+| **Kind** | 无国内镜像(GitHub release:`kind-windows-amd64` + `.sha256sum` 均在) | GitHub 资产带 `.sha256sum` | 同上(需容器运行时) | **不收** |
+| **Kubernetes** | `kubectl.exe` 官方 `dl.k8s.io` **206 MZ ✓** 且 `.sha256` 200(64B);华为云 `/kubernetes/` 无 win | ✓ 官方侧车 | kubectl **只是客户端**;集群本体根本不是"可下载安装包" | **不收**(集群工具,非可携包) |
+| **Jenkins** | TUNA `/jenkins/` 真目录(34 链接,war-stable 2.580.1 war **PK ✓**);官方 `get.jenkins.io` 侧车 200 | ✓ 官方 `.sha256` | **war ≠ zip 即用**(需 servlet 容器 / JDK),且是长期驻留服务 | **不收**(形态 + 服务型) |
+| **Nexus** | **无国内镜像**:华为云 `/sonatype/` 为 12KB 零链接 SPA 兜底页。官方 win zip **在**(版本化 URL `nexus-3.64.0-04-win64.zip`/`3.75.1-01` 均 **206 ✓**),但 `latest-win64.zip` 别名**已 404**(下载路径改版) | 官方**无侧车** → 需 pinnedHash 持续回填 | 服务型:端口 8081、内置 JRE、需 `etc/nexus-default.properties` 配置 + 装服务 | **不收**(镜像缺 + 服务型 + 无校验侧车) |
+| **SonarQube** | **无国内镜像**(TUNA `/sonarqube/` 404;`binaries.sonarsource.com` 目录 403 不可列表) | 官方 `.zip.sha256` 在(26.10 实测 64B) | zip 官方在(PK ✓)**但需外部数据库**(PostgreSQL/SQL Server/Oracle)+ JDK 21 + 服务型 | **不收**(比 ES 更硬:**数据库依赖**) |
+
+**★4 档小结**:**9 个全部不收** —— 三条硬堵点各占一批:①**模型外/服务型**(ES/Jenkins/Nexus/SonarQube/Kafka:端口、数据库、外部运行时、长期服务);②**无国内镜像**(RabbitMQ/Nexus/SonarQube;Minikube/Kind/K8s 的 win 包只在 GitHub);③**非可携包形态**(Kafka 仅 tgz、Jenkins 是 war、K8s 是集群)。**唯一"数据面双全"(镜像 + 校验 + PK 验真)者是 Elasticsearch**,但其服务属性使其归入 v1.2 服务路线,不出现在本版收录候选。
+
+**《开发工具(全)》同难度未评估项(实测 2026-10-17)**:
+
+| 工具 | 实测依据 | 结论 |
+|------|---------|------|
+| **Bazel** | GitHub release:`bazel-9.3.0-windows-x86_64.exe`/`.zip` **+ `.sha256` 均在**(API 实查);无国内镜像 | **延后**(GitHub 依赖 + Windows 下大量操作需 MSYS2/bash) |
+| **Podman** | GitHub release(podman-remote);需 WSL2 后端 | **不收**(模型外) |
+| **Apache httpd** | 华为云 `apache/httpd/binaries/` 下只有 `netware/`、`win32/` 两个空目录(TUNA 同路径无输出);Apache 官方 2.4 起 win 二进制由 Apache Lounge 第三方发 | **不收**(同 Nginx 归档:镜像无 win 包) |
+| **Ansible** | Python 包(pip 安装),无 zip 发行 | **不收**(模型外) |
+| **nmap** | `nmap.org/dist/` **只发 `nmap-7.992-setup.exe`(installer)**,配 `.asc`/`.digest.txt`(无 `.sha256` 侧车、无 win zip) | **不收**(installer 型) |
+| **RedisInsight** | 官方 installer(非镜像) | **不收**(installer 型) |
+| **MongoDB Compass** | 官方 `mongodb-compass-…-win32-x64.exe`(206 实测);无国内镜像 | **不收**(installer 型) |
+| **Obsidian** | 官方 release 仅 `Obsidian-1.14.4.exe`(另有 `.asar.gz`,非独立可运行) | **不收**(installer 型) |
+| **draw.io** | GitHub release:**有 `draw.io-32.4.1-windows.zip` 便携包**(API 实查资产名;直连复跑失败未验 PK),**仅 GitHub 且无 `.sha256` 侧车** | **延后**(镜像缺 + pinned 回填负担) |
+| **Scoop / Chocolatey** | PowerShell / MSI 包管理器 | **不收**(与本工具职责重叠,self-dogfood 冲突) |
+| **Fiddler / Charles** | 商业抓包,installer(msi/exe);官方源 403/404 | **不收**(商业 + installer 型) |
+| **VirtualBox** | 官方 installer exe + 系统级驱动安装(需虚拟化) | **不收**(系统集成) |
+
+- **建议优先级(供拍板)**:本轮 ★4 档 + 未评估项**无一进入"零/极小核心改动即可收录"档**,与 F6 ★3 档结论同向。若用户仍要扩范围,性价比排序仅两项:① **Elasticsearch**(镜像+校验双全,唯一数据面达标;代价 = 新增服务型安装模型:端口/内存/启停)→ 建议并入产品文档 §11 **v1.2 服务/数据库路线**统一设计;② **Bazel / draw.io**(单包形态可行,代价 = 接受 GitHub 依赖或 pinned 哈希回填)。其余维持不收。
+- **不改动**:本轮**不动 catalog、不动门禁**(商店仍 16 工具、`pnpm test` 192/192);全部工作 = 探测 + 本文件回写 + `scripts/f7-probe.mjs`。
+- **状态**:**评估完成,待用户拍板**(与原 B 档遗留 Eclipse / .NET 镜像例外一并发落;二者与本轮结论不重叠)。
 
 ## 非待办(背景,勿在此开工)
 - **v1.x 路线**:Python/数据库、多源自动测速、manifest 导入导出、项目级切换、自动更新、签名发布——见《产品文档.md》§11,属下一版规划,非本清单范围。

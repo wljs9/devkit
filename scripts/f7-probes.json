@@ -1,0 +1,41 @@
+[
+  { "id": "kafka-hw", "kind": "dir", "url": "https://mirrors.huaweicloud.com/apache/kafka/", "grep": "href=\"([0-9][^\"]*)\"", "n": 5, "note": "华为云 Kafka 版本目录" },
+  { "id": "kafka-hw-file", "kind": "any", "url": "https://mirrors.huaweicloud.com/apache/kafka/3.9.0/kafka_2.13-3.9.0.tgz", "note": "实发形态 = gzip/tar.gz,无 zip" },
+  { "id": "kafka-cs", "kind": "sha", "url": "https://archive.apache.org/dist/kafka/3.9.0/kafka_2.13-3.9.0.tgz.sha512", "note": "官方跨域 .sha512 侧车" },
+  { "id": "kafka-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/apache/kafka/", "grep": "href=\"([0-9][^\"]*)\"", "n": 5 },
+
+  { "id": "rabbitmq-hw", "kind": "dir", "url": "https://mirrors.huaweicloud.com/rabbitmq/", "note": "12KB 零链接 = SPA 兜底" },
+  { "id": "rabbitmq-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/rabbitmq/" },
+  { "id": "rabbitmq-ustc", "kind": "dir", "url": "https://mirrors.ustc.edu.cn/rabbitmq/" },
+
+  { "id": "es-hw", "kind": "dir", "url": "https://mirrors.huaweicloud.com/elasticsearch/", "grep": "href=\"([9][^\"]*)\"", "n": 6 },
+  { "id": "es-hw-win", "kind": "zip", "url": "https://mirrors.huaweicloud.com/elasticsearch/9.2.3/elasticsearch-9.2.3-windows-x86_64.zip", "note": "PK 验真" },
+  { "id": "es-hw-win-sha", "kind": "sha", "url": "https://mirrors.huaweicloud.com/elasticsearch/9.2.3/elasticsearch-9.2.3-windows-x86_64.zip.sha512", "note": "镜像自带侧车(本批唯一双全)" },
+  { "id": "es-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/elasticstack/", "grep": "href=\"([0-9][^\"]*)\"", "n": 6 },
+
+  { "id": "minikube-hw-k8s", "kind": "dir", "url": "https://mirrors.huaweicloud.com/kubernetes/", "grep": "href=\"([^\"/][^\"]*/)\"", "n": 5, "note": "仅 apt/yum 仓库,无 win 二进制" },
+  { "id": "minikube-gh-sha", "kind": "sha", "url": "https://github.com/kubernetes/minikube/releases/download/v1.39.0/minikube-windows-amd64.exe.sha256" },
+  { "id": "kind-gh-sha", "kind": "sha", "url": "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-windows-amd64.sha256sum" },
+  { "id": "kubectl-bin", "kind": "bin", "url": "https://dl.k8s.io/release/v1.33.0/bin/windows/amd64/kubectl.exe" },
+  { "id": "kubectl-sha", "kind": "sha", "url": "https://dl.k8s.io/release/v1.33.0/bin/windows/amd64/kubectl.exe.sha256" },
+
+  { "id": "jenkins-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/jenkins/", "grep": "href=\"([a-z][^\"]*/)\"", "n": 6 },
+  { "id": "jenkins-war", "kind": "any", "url": "https://mirrors.tuna.tsinghua.edu.cn/jenkins/war-stable/2.580.1/jenkins.war", "note": "war(PK)≠ zip 即用" },
+  { "id": "jenkins-sha", "kind": "sha", "url": "https://get.jenkins.io/war-stable/latest/jenkins.war.sha256" },
+
+  { "id": "nexus-hw", "kind": "dir", "url": "https://mirrors.huaweicloud.com/sonatype/", "note": "12KB 零链接 = SPA 兜底" },
+  { "id": "nexus-latest-alias", "kind": "zip", "url": "https://download.sonatype.com/nexus/3/latest-win64.zip", "note": "旧别名已 404" },
+  { "id": "nexus-ver", "kind": "zip", "url": "https://download.sonatype.com/nexus/3/nexus-3.75.1-01-win64.zip", "note": "版本化 URL 仍在;无侧车" },
+
+  { "id": "sonar-zip", "kind": "zip", "url": "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-26.10.0.133078.zip" },
+  { "id": "sonar-sha", "kind": "sha", "url": "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-26.10.0.133078.zip.sha256" },
+  { "id": "sonar-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/sonarqube/" },
+
+  { "id": "bazel-gh-sha", "kind": "sha", "url": "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-windows-x86_64.exe.sha256" },
+  { "id": "httpd-hw", "kind": "dir", "url": "https://mirrors.huaweicloud.com/apache/httpd/binaries/win32/", "grep": "href=\"([^\"/?][^\"]*)\"", "n": 8, "note": "win32 目录空" },
+  { "id": "httpd-tuna", "kind": "dir", "url": "https://mirrors.tuna.tsinghua.edu.cn/apache/httpd/binaries/win32/" },
+  { "id": "nmap-dist", "kind": "dir", "url": "https://nmap.org/dist/", "grep": "href=\"([^\"]*\\.(?:exe|zip))\"" , "n": 6, "note": "只发 installer exe,无 win zip" },
+  { "id": "drawio-zip", "kind": "zip", "url": "https://github.com/jgraph/drawio-desktop/releases/download/v32.4.1/draw.io-32.4.1-windows.zip", "note": "便携 zip 有,但仅 GitHub + 无侧车" },
+  { "id": "compass", "kind": "bin", "url": "https://downloads.mongodb.com/compass/mongodb-compass-1.46.0-win32-x64.exe" },
+  { "id": "vbox-latest", "kind": "any", "url": "https://download.virtualbox.org/virtualbox/LATEST.TXT", "note": "系统级 installer + 驱动" }
+]
